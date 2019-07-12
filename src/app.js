@@ -1,8 +1,5 @@
 const {Button, TextInput, TextView, Composite, WidgetCollection, ui} = require('tabris')
 
-console.log(screen.width)
-console.log(screen.height)
-
 let config = {
   'dev_eui': 'ZZZZZZ',
   'app_eui': 'hjadsfjXXX',
@@ -26,7 +23,6 @@ let config = {
   'dig_alr_lo_en': 'SSSSS'
 }
 
-let open = false
 let index = 0
 
 function errorCallback (message) {
@@ -56,13 +52,12 @@ conBut.on('select', () => {
     	serial.open(
         {baudRate: 115200},
         function(successMessage) {
-          open = true                
           console.log(successMessage)
           serial.registerReadCallback(
             function success(data){  
               let array = new Uint8Array(data)
               let str = String.fromCharCode.apply(null, array) 
-              str.replace('\r\n', '')             
+              str = str.trim()             
               onRecv(str)                     
             },
             function error(){
@@ -78,7 +73,9 @@ conBut.on('select', () => {
 })
 
 recvBut.on('select', () => {
-  config = {}
+  ui.contentView.find(Composite).dispose()
+  config = {} 
+  index = 0 
   serial.write('send' + '\r\n')
 })
 
@@ -99,7 +96,7 @@ rwdBut.on('select', () => {
 
 fwdBut.on('select', () => {
   index++
-  if (index > config.length) index = config.length
+  if (index > config.length - 1) index = config.length - 1
   ui.contentView.find(Composite).set('visible', false)
   ui.contentView.find('#' + index).set('visible', true)
 })
@@ -117,9 +114,7 @@ function onRecv(recvStr) {
   }
 }
 
-function createCells() {
-  ui.contentView.find(Composite).dispose()
-  index = 0
+function createCells() {    
   let i = 0
   for (let key in config) {
     let cell = new Composite({
