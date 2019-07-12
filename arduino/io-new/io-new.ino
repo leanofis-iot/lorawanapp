@@ -68,7 +68,7 @@ void setup() {
     setupUsb();
   } 
   wdt_enable(WDTO_8S);
-  setupRak(); 
+  atRakJoinOtaa();
   readAll();  
   uplink();     
 }
@@ -238,35 +238,6 @@ void checkExtInt() {
   }
   detachInterrupt(digitalPinToInterrupt(IN1D_PIN));
 }
-void setupRak() { 
-  const String str = "at+set_config="; 
-  atRakMode();  
-  atRakClass();
-  atRak(F("at+band=EU868"));      
-  atRak(str + F("public_net:on"));
-  atRak(str + F("adr:off"));
-  atRak(str + F("dr:5"));
-  atRak(str + F("ch_mask:0,00FF"));
-  atRak(str + F("pwr_level:0"));
-  atRak(str + F("rx_delay1:1000"));
-  atRak(str + F("ch_list:0,on,868100000,0,5"));
-  atRak(str + F("ch_list:1,on,868300000,0,5"));
-  atRak(str + F("ch_list:2,on,868500000,0,5"));
-  atRak(str + F("ch_list:3,on,867100000,0,5"));
-  atRak(str + F("ch_list:4,on,867300000,0,5"));
-  atRak(str + F("ch_list:5,on,867500000,0,5"));
-  atRak(str + F("ch_list:6,on,867700000,0,5"));
-  atRak(str + F("ch_list:7,on,867900000,0,5"));
-  atRak(str + F("ch_list:8,off"));
-  atRak(str + F("ch_list:9,off"));
-  atRak(str + F("ch_list:10,off"));
-  atRak(str + F("ch_list:11,off"));
-  atRak(str + F("ch_list:12,off"));
-  atRak(str + F("ch_list:13,off"));
-  atRak(str + F("ch_list:14,off"));
-  atRak(str + F("ch_list:15,off"));
-  atRakJoinOtaa();      
-}
 void setupUsb() {     
   clearSerial();
   clearUsbSerial(); 
@@ -277,123 +248,93 @@ void setupUsb() {
     str.trim();
     if (str.startsWith(F("at"))) {       
       Serial.println(str);
-   } else if (str.startsWith(F("period="))) {
+    } else if (str.startsWith(F("period"))) {
       str.replace(F("period="), "");
       conf.period = str.toInt();
-    } else if (str.startsWith(F("pow_tm="))) {
+    } else if (str.startsWith(F("pow_tm"))) {
       str.replace(F("pow_tm="), "");
       conf.pow_tm = str.toInt();
-    } else if (str.startsWith(F("bat_lo_v="))) {
+    } else if (str.startsWith(F("bat_lo_v"))) {
       str.replace(F("bat_lo_v="), "");
       conf.bat_lo_v = str.toFloat();
-    } else if (str.startsWith(F("interface="))) {
+    } else if (str.startsWith(F("interface"))) {
       str.replace(F("interface="), "");
       conf.interface = str.toInt();                  
-    } else if (str.startsWith(F("sensor="))) {
+    } else if (str.startsWith(F("sensor"))) {
       str.replace(F("sensor="), "");
       conf.sensor = str.toInt();
-    } else if (str.startsWith(F("ntc_tmp="))) {
+    } else if (str.startsWith(F("ntc_tmp"))) {
       str.replace(F("ntc_tmp="), "");
       conf.ntc_tmp = str.toFloat();
-    } else if (str.startsWith(F("ntc_res="))) {
+    } else if (str.startsWith(F("ntc_res"))) {
       str.replace(F("ntc_res="), "");
       conf.ntc_res = str.toFloat();
-    } else if (str.startsWith(F("ntc_beta="))) {
+    } else if (str.startsWith(F("ntc_beta"))) {
       str.replace(F("ntc_beta="), "");
       conf.ntc_beta = str.toFloat();
-    } else if (str.startsWith(F("ntc_ser_res="))) {
+    } else if (str.startsWith(F("ntc_ser_res"))) {
       str.replace(F("ntc_ser_res="), "");
       conf.ntc_ser_res = str.toFloat();
-    } else if (str.startsWith(F("an_num_samp="))) {
+    } else if (str.startsWith(F("an_num_samp"))) {
       str.replace(F("an_num_samp="), "");
       conf.an_num_samp = str.toInt();
-    } else if (str.startsWith(F("an_dly_samp="))) {
+    } else if (str.startsWith(F("an_dly_samp"))) {
       str.replace(F("an_dly_samp="), "");
       conf.an_dly_samp = str.toInt();
-    } else if (str.startsWith(F("an_alr_en="))) {
+    } else if (str.startsWith(F("an_alr_en"))) {
       str.replace(F("an_alr_en="), "");
       conf.an_alr_en = str.toInt();
-    } else if (str.startsWith(F("an_alr_hi_set="))) {
+    } else if (str.startsWith(F("an_alr_hi_set"))) {
       str.replace(F("an_alr_hi_set="), "");
       conf.an_alr_hi_set = str.toFloat();
-    } else if (str.startsWith(F("an_alr_hi_clr="))) {
+    } else if (str.startsWith(F("an_alr_hi_clr"))) {
       str.replace(F("an_alr_hi_clr="), "");
       conf.an_alr_hi_clr = str.toFloat();
-    } else if (str.startsWith(F("an_alr_lo_set="))) {
+    } else if (str.startsWith(F("an_alr_lo_set"))) {
       str.replace(F("an_alr_lo_set="), "");
       conf.an_alr_lo_set = str.toFloat();
-    } else if (str.startsWith(F("an_alr_lo_clr="))) {
+    } else if (str.startsWith(F("an_alr_lo_clr"))) {
       str.replace(F("an_alr_lo_clr="), "");
       conf.an_alr_lo_clr = str.toFloat();
-    } else if (str.startsWith(F("dig_alr_hi_en="))) {
+    } else if (str.startsWith(F("dig_alr_hi_en"))) {
       str.replace(F("dig_alr_hi_en="), "");
       conf.dig_alr_hi_en = str.toInt();
-    } else if (str.startsWith(F("dig_alr_lo_en="))) {
+    } else if (str.startsWith(F("dig_alr_lo_en"))) {
       str.replace(F("dig_alr_lo_en="), "");
       conf.dig_alr_lo_en = str.toInt();           
     } else if (str.startsWith(F("save"))) {      
       EEPROM.put(0, conf);       
-    } else if (str.startsWith(F("send"))) {      
-      Serial.println(conf.period);
-      delay(20);
-      Serial.println(conf.pow_tm);
-      delay(20);
-      Serial.println(conf.bat_lo_v);
-      delay(20);
-      Serial.println(conf.interface);
-      delay(20);
-      Serial.println(conf.sensor);
-      delay(20); 
-      Serial.println(conf.ntc_tmp);
-      delay(20);
-      Serial.println(conf.ntc_res);
-      delay(20);
-      Serial.println(conf.ntc_beta);
-      delay(20);
-      Serial.println(conf.ntc_ser_res);
-      delay(20);
-      Serial.println(conf.an_num_samp);
-      delay(20);
-      Serial.println(conf.an_dly_samp);
-      delay(20);
-      Serial.println(conf.an_alr_en);
-      delay(20);
-      Serial.println(conf.an_alr_hi_set);
-      delay(20); 
-      Serial.println(conf.an_alr_hi_clr);
-      delay(20); 
-      Serial.println(conf.an_alr_lo_set);
-      delay(20); 
-      Serial.println(conf.an_alr_lo_clr);
-      delay(20); 
-      Serial.println(conf.an_alr_hi_set);
-      delay(20); 
-      Serial.println(conf.dig_alr_lo_en);
-      delay(20); 
-      Serial.println(F("save"));
-    }                    
+    } else if (str.startsWith(F("send"))) {           
+      usbSerial.println(conf.period);      
+      usbSerial.println(conf.pow_tm);      
+      usbSerial.println(conf.bat_lo_v);      
+      usbSerial.println(conf.interface);      
+      usbSerial.println(conf.sensor);      
+      usbSerial.println(conf.ntc_tmp);      
+      usbSerial.println(conf.ntc_res);      
+      usbSerial.println(conf.ntc_beta);      
+      usbSerial.println(conf.ntc_ser_res);      
+      usbSerial.println(conf.an_num_samp);      
+      usbSerial.println(conf.an_dly_samp);      
+      usbSerial.println(conf.an_alr_en);      
+      usbSerial.println(conf.an_alr_hi_set);      
+      usbSerial.println(conf.an_alr_hi_clr);       
+      usbSerial.println(conf.an_alr_lo_set);      
+      usbSerial.println(conf.an_alr_lo_clr);      
+      usbSerial.println(conf.an_alr_hi_set);      
+      usbSerial.println(conf.dig_alr_lo_en);       
+      usbSerial.println(F("save"));
+    } 
     str = "";
     str = Serial.readStringUntil('\n');
-    str.trim();
-    if (str.length() >= 0) {
-      usbSerial.println(str);
-    }    
+    str.trim();    
+      usbSerial.println(str);         
   }    
 }
 void atRak(const String message) {  
   clearSerial();  
   Serial.println(message);
   Serial.find(F("OK\r\n"));  
-}
-void atRakMode() {  
-  clearSerial();  
-  Serial.println(F("at+mode=0"));
-  Serial.find(F("OK!\r\n"));
-}
-void atRakClass() {  
-  clearSerial();  
-  Serial.println(F("at+set_config=class:0"));
-  Serial.find(F("OK!\r\n"));
 }
 void atRakJoinOtaa() {  
   clearSerial();  

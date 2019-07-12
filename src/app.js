@@ -1,4 +1,4 @@
-const {Button, TextInput, TextView, Composite, WidgetCollection, ui} = require('tabris')
+const {Button, TextInput, TextView, Composite, ui} = require('tabris')
 
 let config = {
   'dev_eui': 'ZZZZZZ',
@@ -50,14 +50,15 @@ conBut.on('select', () => {
     {driver: 'Ch34xSerialDriver'},
     function(successMessage) {
     	serial.open(
-        {baudRate: 115200},
+        {baudRate: 115200}, // default parser \n
         function(successMessage) {
           console.log(successMessage)
           serial.registerReadCallback(
             function success(data){  
               let array = new Uint8Array(data)
               let str = String.fromCharCode.apply(null, array) 
-              str = str.trim()             
+              str = str.trim() 
+              console.log(str)            
               onRecv(str)                     
             },
             function error(){
@@ -96,7 +97,7 @@ rwdBut.on('select', () => {
 
 fwdBut.on('select', () => {
   index++
-  if (index > config.length - 1) index = config.length - 1
+  if (index > Object.keys(config).length - 1) index = Object.keys(config).length - 1 
   ui.contentView.find(Composite).set('visible', false)
   ui.contentView.find('#' + index).set('visible', true)
 })
@@ -119,7 +120,7 @@ function createCells() {
   for (let key in config) {
     let cell = new Composite({
       id: i,
-      top: 100, left: 0, right: 0, height: 120, visible: false, background: 'red'    
+      top: 100, left: 0, right: 0, height: 120, visible: false
     }).appendTo(ui.contentView)
     new TextView({
       top: 0, left: 0, right: 0, height: 50, alignment: 'center',
@@ -134,3 +135,5 @@ function createCells() {
   }
   ui.contentView.find('#0').set('visible', true)  
 }
+
+createCells()
