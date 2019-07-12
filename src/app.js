@@ -33,23 +33,23 @@ function errorCallback (message) {
     console.log(message)
 }
 
-let connect = new Button({
+let conBut = new Button({
   top: 20, left: 40, width: 80, text: 'Connect'   
 }).appendTo(ui.contentView)
-let receive = new Button({
+let recvBut = new Button({
   top: 20, left: 140, width: 80, text: 'Receive'   
 }).appendTo(ui.contentView)
-let send = new Button({
+let sendBut = new Button({
   top: 20, left: 240, width: 80, text: 'Send'   
 }).appendTo(ui.contentView)
-let rwd = new Button({
+let rwdBut = new Button({
   top: 230, left: 90, width: 80, text: 'Rwd'   
 }).appendTo(ui.contentView)
-let fwd = new Button({
+let fwdBut = new Button({
   top: 230, left: 190, width: 80, text: 'fwd'   
 }).appendTo(ui.contentView)
 
-connect.on('select', () => {
+conBut.on('select', () => {
   serial.requestPermission(
     {driver: 'Ch34xSerialDriver'},
     function(successMessage) {
@@ -63,7 +63,7 @@ connect.on('select', () => {
               let array = new Uint8Array(data)
               let str = String.fromCharCode.apply(null, array) 
               str.replace('\r\n', '')             
-              onReceive(str)                     
+              onRecv(str)                     
             },
             function error(){
               console.log("Failed to register read callback")
@@ -77,34 +77,38 @@ connect.on('select', () => {
   )
 })
 
-receive.on('select', () => {
-  createCells()
-
+recvBut.on('select', () => {
+  config = {}
+  serial.write('send' + '\r\n')
 })
 
-send.on('select', () => {
-
+sendBut.on('select', () => {
+  for (let key in config) {
+    serial.write(key + '=' + config[key] + '\r\n')
+    //delay
+  }
+  serial.write('save' + '\r\n')
 })
 
-rwd.on('select', () => {
+rwdBut.on('select', () => {
   index--
   if (index < 0) index = 0
   ui.contentView.find(Composite).set('visible', false)
   ui.contentView.find('#' + index).set('visible', true)
 })
 
-fwd.on('select', () => {
+fwdBut.on('select', () => {
   index++
   if (index > config.length) index = config.length
   ui.contentView.find(Composite).set('visible', false)
   ui.contentView.find('#' + index).set('visible', true)
 })
 
-function onReceive(receiveString) {
-  if (receiveString = 'save') {
+function onRecv(recvStr) {
+  if (recvStr = 'save') {
     createCells()
   } else {
-    let str = receiveString.split('=')
+    let str = recvStr.split('=')
     for (let key in config) {
       if (key = str[0]) {
         config[key] = str[1]
@@ -114,7 +118,6 @@ function onReceive(receiveString) {
 }
 
 function createCells() {
-  console.log('hey')
   ui.contentView.find(Composite).dispose()
   index = 0
   let i = 0
@@ -136,27 +139,3 @@ function createCells() {
   }
   ui.contentView.find('#0').set('visible', true)  
 }
-
-
-
-
-//connect.on('select', () => console.log(config[0].value))
-/*
-let tx_data = new TextInput({
-    top: 150, left:100, text: 'at+version', background: 'yellow'
-}).appendTo(ui.contentView)
-
-let  rx_data = new TextView({
-    top: 200, left:100, text: 'hello', background: 'red'
-}).appendTo(ui.contentView)
-
-
-
-
-send.on('select', () => {
-    console.log('send it')       
-    //let str = 'at+join=otaa' + String.fromCharCode(13, 10)
-    let str = 'at+send=0,1,01670110' + '\r\n'
-    serial.write(str)     
-})
-*/
