@@ -98,7 +98,7 @@ void uplink() {
   lpp.addAnalogInput(3, isBatteryLowFlag);
   atRakWake();
   atRakSend("at+send=0,2," + *lpp.getBuffer());  
-  atRak(F("at+sleep"));  
+  atRakSleep();  
 }
 void readAll() {
   if (conf.interface == _dig) {
@@ -243,97 +243,205 @@ void setupUsb() {
   clearUsbSerial(); 
   String str; 
   while (true) { 
-    str = "";
-    str = usbSerial.readStringUntil('\n');
-    str.trim();
-    if (str.startsWith(F("at"))) {       
-      Serial.println(str);
-    } else if (str.startsWith(F("period"))) {
-      str.replace(F("period="), "");
-      conf.period = str.toInt();
-    } else if (str.startsWith(F("pow_tm"))) {
-      str.replace(F("pow_tm="), "");
-      conf.pow_tm = str.toInt();
-    } else if (str.startsWith(F("bat_lo_v"))) {
-      str.replace(F("bat_lo_v="), "");
-      conf.bat_lo_v = str.toFloat();
-    } else if (str.startsWith(F("interface"))) {
-      str.replace(F("interface="), "");
-      conf.interface = str.toInt();                  
-    } else if (str.startsWith(F("sensor"))) {
-      str.replace(F("sensor="), "");
-      conf.sensor = str.toInt();
-    } else if (str.startsWith(F("ntc_tmp"))) {
-      str.replace(F("ntc_tmp="), "");
-      conf.ntc_tmp = str.toFloat();
-    } else if (str.startsWith(F("ntc_res"))) {
-      str.replace(F("ntc_res="), "");
-      conf.ntc_res = str.toFloat();
-    } else if (str.startsWith(F("ntc_beta"))) {
-      str.replace(F("ntc_beta="), "");
-      conf.ntc_beta = str.toFloat();
-    } else if (str.startsWith(F("ntc_ser_res"))) {
-      str.replace(F("ntc_ser_res="), "");
-      conf.ntc_ser_res = str.toFloat();
-    } else if (str.startsWith(F("an_num_samp"))) {
-      str.replace(F("an_num_samp="), "");
-      conf.an_num_samp = str.toInt();
-    } else if (str.startsWith(F("an_dly_samp"))) {
-      str.replace(F("an_dly_samp="), "");
-      conf.an_dly_samp = str.toInt();
-    } else if (str.startsWith(F("an_alr_en"))) {
-      str.replace(F("an_alr_en="), "");
-      conf.an_alr_en = str.toInt();
-    } else if (str.startsWith(F("an_alr_hi_set"))) {
-      str.replace(F("an_alr_hi_set="), "");
-      conf.an_alr_hi_set = str.toFloat();
-    } else if (str.startsWith(F("an_alr_hi_clr"))) {
-      str.replace(F("an_alr_hi_clr="), "");
-      conf.an_alr_hi_clr = str.toFloat();
-    } else if (str.startsWith(F("an_alr_lo_set"))) {
-      str.replace(F("an_alr_lo_set="), "");
-      conf.an_alr_lo_set = str.toFloat();
-    } else if (str.startsWith(F("an_alr_lo_clr"))) {
-      str.replace(F("an_alr_lo_clr="), "");
-      conf.an_alr_lo_clr = str.toFloat();
-    } else if (str.startsWith(F("dig_alr_hi_en"))) {
-      str.replace(F("dig_alr_hi_en="), "");
-      conf.dig_alr_hi_en = str.toInt();
-    } else if (str.startsWith(F("dig_alr_lo_en"))) {
-      str.replace(F("dig_alr_lo_en="), "");
-      conf.dig_alr_lo_en = str.toInt();           
-    } else if (str.startsWith(F("save"))) {      
-      EEPROM.put(0, conf);       
-    } else if (str.startsWith(F("send"))) {           
-      usbSerial.println(conf.period);      
-      usbSerial.println(conf.pow_tm);      
-      usbSerial.println(conf.bat_lo_v);      
-      usbSerial.println(conf.interface);      
-      usbSerial.println(conf.sensor);      
-      usbSerial.println(conf.ntc_tmp);      
-      usbSerial.println(conf.ntc_res);      
-      usbSerial.println(conf.ntc_beta);      
-      usbSerial.println(conf.ntc_ser_res);      
-      usbSerial.println(conf.an_num_samp);      
-      usbSerial.println(conf.an_dly_samp);      
-      usbSerial.println(conf.an_alr_en);      
-      usbSerial.println(conf.an_alr_hi_set);      
-      usbSerial.println(conf.an_alr_hi_clr);       
-      usbSerial.println(conf.an_alr_lo_set);      
-      usbSerial.println(conf.an_alr_lo_clr);      
-      usbSerial.println(conf.an_alr_hi_set);      
-      usbSerial.println(conf.dig_alr_lo_en);       
-      usbSerial.println(F("save"));
-    } 
-    str = "";
-    str = Serial.readStringUntil('\n');
-    str.trim();    
-      usbSerial.println(str);         
+    if (usbSerial.available()) {
+      str = "";
+      str = usbSerial.readStringUntil('\n');
+      str.trim();
+      if (str.startsWith(F("at"))) {       
+        Serial.println(str);
+      } else if (str.startsWith(F("period"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("period="), "");
+          conf.period = str.toInt();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.period);
+        }  
+      } else if (str.startsWith(F("pow_tm"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("pow_tm="), "");
+          conf.pow_tm = str.toInt();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.pow_tm);
+        } 
+      } else if (str.startsWith(F("bat_lo_v"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("bat_lo_v="), "");
+          conf.bat_lo_v = str.toFloat();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.bat_lo_v);
+        }  
+      } else if (str.startsWith(F("interface"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("interface="), "");
+          conf.interface = str.toInt();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.interface);
+        }  
+      } else if (str.startsWith(F("sensor"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("sensor="), "");
+          conf.sensor = str.toInt();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.sensor);
+        }  
+      } else if (str.startsWith(F("ntc_tmp"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("ntc_tmp="), "");
+          conf.ntc_tmp = str.toFloat();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.ntc_tmp);
+        }   
+      } else if (str.startsWith(F("ntc_res"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("ntc_res="), "");
+          conf.ntc_res = str.toFloat();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.ntc_res);
+        } 
+      } else if (str.startsWith(F("ntc_beta"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("ntc_beta="), "");
+          conf.ntc_beta = str.toFloat();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.ntc_beta);
+        } 
+      } else if (str.startsWith(F("ntc_ser_res"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("ntc_ser_res="), "");
+          conf.ntc_ser_res = str.toFloat();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.ntc_ser_res);
+        }
+      } else if (str.startsWith(F("an_num_samp"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("an_num_samp="), "");
+          conf.an_num_samp = str.toInt();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.an_num_samp);
+        }    
+      } else if (str.startsWith(F("an_dly_samp"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("an_dly_samp="), "");
+          conf.an_dly_samp = str.toInt();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.an_dly_samp);
+        }         
+      } else if (str.startsWith(F("an_alr_en"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("an_alr_en="), "");
+          conf.an_alr_en = str.toInt();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.an_alr_en);
+        }  
+      } else if (str.startsWith(F("an_alr_hi_set"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("an_alr_hi_set="), "");
+          conf.an_alr_hi_set = str.toFloat();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.an_alr_hi_set);
+        } 
+      } else if (str.startsWith(F("an_alr_hi_clr"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("an_alr_hi_clr="), "");
+          conf.an_alr_hi_clr = str.toFloat();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.an_alr_hi_clr);
+        }  
+      } else if (str.startsWith(F("an_alr_lo_set"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("an_alr_lo_set="), "");
+          conf.an_alr_lo_set = str.toFloat();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.an_alr_lo_set);
+        }   
+      } else if (str.startsWith(F("an_alr_lo_clr"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("an_alr_lo_clr="), "");
+          conf.an_alr_lo_clr = str.toFloat();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.an_alr_lo_clr);
+        }
+      } else if (str.startsWith(F("dig_alr_hi_en"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("dig_alr_hi_en="), "");
+          conf.dig_alr_hi_en = str.toInt();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.dig_alr_hi_en);
+        }   
+      } else if (str.startsWith(F("dig_alr_lo_en"))) {
+        if (str.indexOf(F("=")) >= 0) {
+          str.replace(F("dig_alr_lo_en="), "");
+          conf.dig_alr_lo_en = str.toInt();
+          EEPROM.put(0, conf);
+          usbSerial.println(F("OK"));
+        } else {
+          usbSerial.print(F("OK"));
+          usbSerial.println(conf.dig_alr_lo_en);
+        }               
+      }       
+    }
+    if (Serial.available()) {
+      str = "";
+      str = Serial.readStringUntil('\n');
+      str.trim();    
+      usbSerial.println(str);   
+    }      
   }    
 }
-void atRak(const String message) {  
+void atRakSleep() {  
   clearSerial();  
-  Serial.println(message);
+  Serial.println(F("at+sleep"));
   Serial.find(F("OK\r\n"));  
 }
 void atRakJoinOtaa() {  

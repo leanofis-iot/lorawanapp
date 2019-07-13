@@ -1,9 +1,6 @@
 const {Button, TextInput, TextView, Composite, ui} = require('tabris')
 
 let config = {
-  'dev_eui': 'ZZZZZZ',
-  'app_eui': 'hjadsfjXXX',
-  'app_key': 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
   'pow_tm': 'XXXXXXXXXXXXXXXX',
   'bat_lo_v': 'XXXXXXXXXXXXXXXX',
   'interface': 'XXXXXXXXXXXXXXXX',
@@ -23,26 +20,26 @@ let config = {
   'dig_alr_lo_en': 'SSSSS'
 }
 
-let index = 0
+let confIndex = 0
 
 function errorCallback (message) {
     console.log(message)
 }
 
 let conBut = new Button({
-  top: 20, left: 40, width: 80, text: 'Connect'   
+  top: 5, left: 40, width: 80, text: 'Connect'   
 }).appendTo(ui.contentView)
-let recvBut = new Button({
-  top: 20, left: 140, width: 80, text: 'Receive'   
+let confRecvBut = new Button({
+  top: 145, left: 100, width: 80, text: 'Receive'   
 }).appendTo(ui.contentView)
-let sendBut = new Button({
-  top: 20, left: 240, width: 80, text: 'Send'   
+let confSendBut = new Button({
+  top: 145, left: 200, width: 80, text: 'Send'   
 }).appendTo(ui.contentView)
-let rwdBut = new Button({
-  top: 230, left: 90, width: 80, text: 'Rwd'   
+let confRwdBut = new Button({
+  top: 60, left: 40, width: 80, text: 'Rwd'   
 }).appendTo(ui.contentView)
-let fwdBut = new Button({
-  top: 230, left: 190, width: 80, text: 'fwd'   
+let confFwdBut = new Button({
+  top: 60, left: 240, width: 80, text: 'fwd'   
 }).appendTo(ui.contentView)
 
 conBut.on('select', () => {
@@ -73,14 +70,14 @@ conBut.on('select', () => {
   )
 })
 
-recvBut.on('select', () => {
+confRecvBut.on('select', () => {
   ui.contentView.find(Composite).dispose()
   config = {} 
-  index = 0 
+  confIndex = 0 
   serial.write('send' + '\r\n')
 })
 
-sendBut.on('select', () => {
+confSendBut.on('select', () => {
   for (let key in config) {
     serial.write(key + '=' + config[key] + '\r\n')
     //delay
@@ -88,18 +85,18 @@ sendBut.on('select', () => {
   serial.write('save' + '\r\n')
 })
 
-rwdBut.on('select', () => {
-  index--
-  if (index < 0) index = 0
+confRwdBut.on('select', () => {
+  confIndex--
+  if (confIndex < 0) confIndex = 0
   ui.contentView.find(Composite).set('visible', false)
-  ui.contentView.find('#' + index).set('visible', true)
+  ui.contentView.find('#' + confIndex).set('visible', true)
 })
 
-fwdBut.on('select', () => {
-  index++
-  if (index > Object.keys(config).length - 1) index = Object.keys(config).length - 1 
+confFwdBut.on('select', () => {
+  confIndex++
+  if (confIndex > Object.keys(config).length - 1) confIndex = Object.keys(config).length - 1 
   ui.contentView.find(Composite).set('visible', false)
-  ui.contentView.find('#' + index).set('visible', true)
+  ui.contentView.find('#' + confIndex).set('visible', true)
 })
 
 function onRecv(recvStr) {
@@ -120,14 +117,14 @@ function createCells() {
   for (let key in config) {
     let cell = new Composite({
       id: i,
-      top: 100, left: 0, right: 0, height: 120, visible: false
+      top: 60, left: 0, right: 0, height: 140, visible: false, background: 'gray'
     }).appendTo(ui.contentView)
     new TextView({
-      top: 0, left: 0, right: 0, height: 50, alignment: 'center',
+      top: 0, left: 0, right: 0, height: 30, alignment: 'center',
       text: key, font: 'bold 24px'
     }).appendTo(cell)
     new TextInput({
-      top: 50, left: 10, right: 10, height: 50, alignment: 'center',
+      top: 40, left: 10, right: 10, height: 50, alignment: 'center',
       text: config[key]
     }).on('textChanged', (target, value) => config[key] = value)
     .appendTo(cell)
