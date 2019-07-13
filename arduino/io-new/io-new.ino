@@ -60,13 +60,13 @@ void setup() {
   setupPins();
   setupPeripheral();  
   setupConf();
-  Serial.begin(115200);
-  Serial.setTimeout(20000);
+  Serial.begin(115200);  
   usbSerial.begin(9600); 
   delay(3000);
   if (digitalRead(USB_PIN) == HIGH) {
     setupUsb();
-  } 
+  }
+  Serial.setTimeout(20000); 
   wdt_enable(WDTO_8S);
   atRakJoinOtaa();
   readAll();  
