@@ -3,22 +3,33 @@
 #include <avr/wdt.h>
 #include "LowPower.h"
 #include <CayenneLPP.h>
+//#include <stdlib.h>
 
-const byte VOUT_CNT_PIN  = 7;   // PD7/AIN1/PCINT23
-const byte BAT_PIN       = 14;  // PC0/ADC0/PCINT8
-const byte BAT_CNT_PIN   = 5;   // PD5/PCINT21
-const byte USB_RX_PIN    = 8;   // PB0/PCINT0           AltSoftSerial RX
-const byte USB_TX_PIN    = 9;   // PB1/PCINT1           AltSoftSerial TX
-const byte USB_PIN       = 6;   // PD6/AIN0/PCINT22
-const byte RAK_RX_PIN    = 0;   // PD0/RXD/PCINT16      Hardware Serial RX
-const byte RAK_TX_PIN    = 1;   // PD1/TXD/PCINT17      Hardware Serial TX
-const byte RAK_RES_PIN   = 15;  // PC1/ADC1/PCINT9
-const byte IN1A_PIN      = 18;  // PC4/ADC4/SDA/PCINT12 Hardware I2C SDA
-const byte IN2A_PIN      = 19;  // PC5/ADC5/SCL/PCINT13 Hardware I2C SCL
-const byte IN1D_PIN      = 2;   //PD2/INT0/PCINT18
-const byte IN2D_PIN      = 3;   // PD3/INT1/PCINT19
-const byte OUT1_PIN      = 16; // PC2/ADC2/PCINT10
-const byte OUT2_PIN      = 17; // PC3/ADC3/PCINT11
+const uint8_t VOUT_CNT_PIN  = 7;   // PD7/AIN1/PCINT23
+const uint8_t BAT_PIN       = 14;  // PC0/ADC0/PCINT8
+const uint8_t BAT_CNT_PIN   = 5;   // PD5/PCINT21
+const uint8_t USB_RX_PIN    = 8;   // PB0/PCINT0           AltSoftSerial RX
+const uint8_t USB_TX_PIN    = 9;   // PB1/PCINT1           AltSoftSerial TX
+const uint8_t USB_PIN       = 6;   // PD6/AIN0/PCINT22
+const uint8_t RAK_RX_PIN    = 0;   // PD0/RXD/PCINT16      Hardware Serial RX
+const uint8_t RAK_TX_PIN    = 1;   // PD1/TXD/PCINT17      Hardware Serial TX
+const uint8_t RAK_RES_PIN   = 15;  // PC1/ADC1/PCINT9
+const uint8_t IN1A_PIN      = 18;  // PC4/ADC4/SDA/PCINT12 Hardware I2C SDA
+const uint8_t IN2A_PIN      = 19;  // PC5/ADC5/SCL/PCINT13 Hardware I2C SCL
+const uint8_t IN1D_PIN      = 2;   //PD2/INT0/PCINT18
+const uint8_t IN2D_PIN      = 3;   // PD3/INT1/PCINT19
+const uint8_t OUT1_PIN      = 16; // PC2/ADC2/PCINT10
+const uint8_t OUT2_PIN      = 17; // PC3/ADC3/PCINT11
+
+const uint8_t _an = 0;
+const uint8_t _dig = 1;
+const uint8_t _3v = 1;
+const uint8_t _5v = 2;
+const uint8_t _10v = 3;
+const uint8_t _ntc = 4;
+
+float analog;
+bool isAnalogAlarmChanged, isAnalogAlarmFlag, isBatteryLowChanged, isBatteryLowFlag, isExtInt, isPowerUp = true;
 
 struct Conf {
   uint16_t period;
@@ -41,17 +52,6 @@ struct Conf {
   uint8_t dig_alr_lo_en;  
 };
 
-const uint8_t _an = 0;
-const uint8_t _dig = 1;
-const uint8_t _3v = 1;
-const uint8_t _5v = 2;
-const uint8_t _10v = 3;
-const uint8_t _ntc = 4;
-
-float analog;
-bool isAnalogAlarmChanged, isAnalogAlarmFlag, isBatteryLowChanged, isBatteryLowFlag;
-bool isExtInt;
-
 Conf conf;
 AltSoftSerial usbSerial;
 CayenneLPP lpp(51);
@@ -73,7 +73,7 @@ void setup() {
   uplink();     
 }
 void loop() {  
-  for (byte ii = 0; ii < (conf.period * 7.5); ii++) {
+  for (uint8_t ii = 0; ii < (conf.period * 7.5); ii++) {
     setupAttachInt();    
     LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); 
     wdt_enable(WDTO_8S);
@@ -96,6 +96,10 @@ void uplink() {
     lpp.addDigitalInput(1, digitalRead(IN1D_PIN));
   }
   lpp.addAnalogInput(3, isBatteryLowFlag);
+  if (isPowerUp) {
+    isPowerUp = false;
+    lpp.addAnalogOutput(100, 0);
+  }
   atRakWake();
   atRakSend("at+send=0,2," + *lpp.getBuffer());  
   atRakSleep();  
@@ -454,10 +458,18 @@ void atRakSend(const String message) {
   Serial.println(message);
   Serial.find(F("2,0,0\r\n"));
   Serial.setTimeout(100);
-  const String recv_data;
-  recv_data = Serial.readStringUntil("\n");
+  String recv_str;
+  recv_str = Serial.readStringUntil('\n');
   Serial.setTimeout(20000);
-  recv_data.trim();
+  recv_str.trim();
+  const uint8_t i = recv_str.lastIndexOf(',');
+  recv_str = recv_str.substring(i + 3);
+  recv_str.replace("ff", ""); 
+  const char buf[4];
+  recv_str.toCharArray(buf, sizeof(buf));
+  recv_str = strtol(buf, NULL, 0);
+  
+     
 }
 void atRakWake() {  
   clearSerial();  

@@ -6,19 +6,19 @@
 #include "LowPower.h"
 #include <CayenneLPP.h>
 
-const byte VOUT_CNT_PIN  = 7;   // PD7/AIN1/PCINT23
-const byte BAT_PIN       = 14;  // PC0/ADC0/PCINT8
-const byte BAT_CNT_PIN   = 5;   // PD5/PCINT21
-const byte USB_RX_PIN    = 8;   // PB0/PCINT0           AltSoftSerial RX
-const byte USB_TX_PIN    = 9;   // PB1/PCINT1           AltSoftSerial TX
-const byte USB_PIN       = 6;   // PD6/AIN0/PCINT22
-const byte RAK_RX_PIN    = 0;   // PD0/RXD/PCINT16      Hardware Serial RX
-const byte RAK_TX_PIN    = 1;   // PD1/TXD/PCINT17      Hardware Serial TX
-const byte RAK_RES_PIN   = 15;  // PC1/ADC1/PCINT9
-const byte SHT_SDA_PIN   = 18;  // PC4/ADC4/SDA/PCINT12 Hardware I2C SDA
-const byte SHT_SCL_PIN   = 19;  // PC5/ADC5/SCL/PCINT13 Hardware I2C SCL
-const byte SHT_RES_PIN   = 3;   // PD3/INT1/PCINT19
-const byte SHT_ALR_PIN   = 2;   // PD2/INT0/PCINT18
+const uint8_t VOUT_CNT_PIN  = 7;   // PD7/AIN1/PCINT23
+const uint8_t BAT_PIN       = 14;  // PC0/ADC0/PCINT8
+const uint8_t BAT_CNT_PIN   = 5;   // PD5/PCINT21
+const uint8_t USB_RX_PIN    = 8;   // PB0/PCINT0           AltSoftSerial RX
+const uint8_t USB_TX_PIN    = 9;   // PB1/PCINT1           AltSoftSerial TX
+const uint8_t USB_PIN       = 6;   // PD6/AIN0/PCINT22
+const uint8_t RAK_RX_PIN    = 0;   // PD0/RXD/PCINT16      Hardware Serial RX
+const uint8_t RAK_TX_PIN    = 1;   // PD1/TXD/PCINT17      Hardware Serial TX
+const uint8_t RAK_RES_PIN   = 15;  // PC1/ADC1/PCINT9
+const uint8_t SHT_SDA_PIN   = 18;  // PC4/ADC4/SDA/PCINT12 Hardware I2C SDA
+const uint8_t SHT_SCL_PIN   = 19;  // PC5/ADC5/SCL/PCINT13 Hardware I2C SCL
+const uint8_t SHT_RES_PIN   = 3;   // PD3/INT1/PCINT19
+const uint8_t SHT_ALR_PIN   = 2;   // PD2/INT0/PCINT18
 
 struct Conf {
   uint16_t period;
@@ -59,8 +59,8 @@ void setup() {
   uplink(sht.periodicFetchData());   
 }
 void loop() {  
-  for (byte i = 0; i < (conf.period * 7.5); i++) {
-    attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUp, RISING);
+  for (uint8_t i = 0; i < (conf.period * 7.5); i++) {
+    attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUp, CHANGE);
     LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
     wdt_enable(WDTO_8S);
     readAll();     
@@ -134,7 +134,8 @@ void setupSht() {
   sht.writeAlertLow(conf.tmp_alr_lo_clr, conf.tmp_alr_lo_set, conf.hum_alr_lo_clr, conf.hum_alr_lo_set); 
 }
 void checkExtInt() {
-  isExtInt = INTF0;
+  //if (PCIF2 || INTF0) {
+  isExtInt = PCIF2;  
   detachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN));
 }
 void setupUsb() {     
@@ -284,9 +285,15 @@ void atRakSend(const String message) {
   Serial.find(F("2,0,0\r\n"));
   Serial.setTimeout(100);
   const String recv_data;
-  recv_data = Serial.readStringUntil("\n");
+  recv_data = Serial.readStringUntil('\n');
   Serial.setTimeout(20000);
   recv_data.trim();
+  const uint8_t i = recv_data.lastIndexOf(',');
+  recv_data = recv_data.substring(i + 3);
+  recv_data.replace("ff", ""); 
+  const char buf[4];
+  recv_data.toCharArray(buf, sizeof(buf));
+  conf.period = strtoul(buf, NULL, 0) / 100;   
 }
 void atRakWake() {  
   clearSerial();  
