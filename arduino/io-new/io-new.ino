@@ -464,12 +464,53 @@ void atRakSend(const String message) {
   recv_str.trim();
   const uint8_t i = recv_str.lastIndexOf(',');
   recv_str = recv_str.substring(i + 3);
-  recv_str.replace("ff", ""); 
+  recv_str.replace("ff", "");
+  lppDownDec(recv_str);
+  EEPROM.put(0, conf);     
+}
+void lppDownDec(String recv_str) {
   const char buf[4];
   recv_str.toCharArray(buf, sizeof(buf));
   recv_str = strtol(buf, NULL, 0);
-  
-     
+  const uint8_t conf_key = recv_str.substring(recv_str.length() - 2).toInt();
+  const uint16_t conf_value = recv_str.substring(0, recv_str.length() - 2).toInt();
+  if (conf_key == 1) {
+    conf.period = conf_value;
+  } else if (conf_key == 2) {
+    conf.pow_tm = conf_value;
+  } else if (conf_key == 3) {
+    conf.bat_lo_v = conf_value;
+  } else if (conf_key == 4) {
+    conf.interface = conf_value;
+  } else if (conf_key == 5) {
+    conf.sensor = conf_value;
+  } else if (conf_key == 6) {
+    conf.ntc_tmp = conf_value;
+  } else if (conf_key == 7) {
+    conf.ntc_res = conf_value;
+  } else if (conf_key == 8) {
+    conf.ntc_beta = conf_value;
+  } else if (conf_key == 9) {
+    conf.ntc_ser_res = conf_value;
+  } else if (conf_key == 10) {
+    conf.an_num_samp = conf_value;
+  } else if (conf_key == 11) {
+    conf.an_dly_samp = conf_value;
+  } else if (conf_key == 12) {
+    conf.an_alr_en = conf_value;
+  } else if (conf_key == 13) {
+    conf.an_alr_hi_set = conf_value;
+  } else if (conf_key == 14) {
+    conf.an_alr_hi_clr = conf_value;
+  } else if (conf_key == 15) {
+    conf.an_alr_lo_set = conf_value;
+  } else if (conf_key == 16) {
+    conf.an_alr_lo_clr = conf_value;
+  } else if (conf_key == 17) {
+    conf.dig_alr_hi_en = conf_value;
+  } else if (conf_key == 18) {
+    conf.dig_alr_lo_en = conf_value;    
+  }  
 }
 void atRakWake() {  
   clearSerial();  
