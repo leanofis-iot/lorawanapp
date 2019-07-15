@@ -31,6 +31,8 @@ const uint8_t _ntc = 4;
 
 float analog;
 bool isAnalogAlarmChanged, isAnalogAlarmFlag, isBatteryLowChanged, isBatteryLowFlag, isExtInt, isPowerUp = true;
+const unsigned long wdtMs60000 = 60000;
+const unsigned long wdtMs100 = 100; 
 
 struct Conf {
   uint16_t period;
@@ -66,8 +68,7 @@ void setup() {
   delay(3000);
   if (digitalRead(USB_PIN) == HIGH) {
     setupUsb();
-  }
-  Serial.setTimeout(20000); 
+  }   
   wdt_enable(WDTO_8S);
   atRakJoinOtaa();
   readAll();  
@@ -245,9 +246,7 @@ void checkExtInt() {
   }
   detachInterrupt(digitalPinToInterrupt(IN1D_PIN));
 }
-void setupUsb() {     
-  clearSerial();
-  clearUsbSerial(); 
+void setupUsb() {   
   String str; 
   while (true) { 
     if (usbSerial.available()) {
@@ -447,36 +446,43 @@ void setupUsb() {
   }    
 }
 void atRakSleep() {  
-  clearSerial();  
   Serial.println(F("at+sleep"));
-  Serial.find(F("OK\r\n"));  
+  const String str = serialReadLine(wdtMs60000);
+  if (!str.endsWith(F("OK"))) {
+    while(true);
+  }
 }
 void atRakJoinOtaa() {  
-  clearSerial();  
   Serial.println(F("at+join=otaa"));
-  Serial.find(F("3,0,0\r\n"));
+  const String str = serialReadLine(wdtMs60000);
+  if (!str.endsWith(F("3,0,0"))) {
+    while(true);
+  } 
 }
 void atRakSend(const String message) {  
-  clearSerial();  
   Serial.println(message);
-  Serial.find(F("2,0,0\r\n"));
-  Serial.setTimeout(100);
-  String recv_str;
-  recv_str = Serial.readStringUntil('\n');
-  Serial.setTimeout(20000);
-  recv_str.trim();
-  const uint8_t i = recv_str.lastIndexOf(',');
-  recv_str = recv_str.substring(i + 3);
-  recv_str.replace("ff", "");
-  lppDownDec(recv_str);
+  String str;
+  str = serialReadLine(wdtMs60000);
+  if (!str.endsWith(F("OK"))) {
+    while(true);
+  }
+  str = serialReadLine(wdtMs60000);
+  if (!str.endsWith(F("2,0,0"))) {
+    while(true);
+  } 
+  str = serialReadLine(wdtMs100);
+  const uint8_t i = str.lastIndexOf(',');
+  str = str.substring(i + 3);
+  str.replace("ff", "");
+  lppDownDec(str);
   EEPROM.put(0, conf);     
 }
-void lppDownDec(String recv_str) {
+void lppDownDec(String str) {
   const char buf[4];
-  recv_str.toCharArray(buf, sizeof(buf));
-  recv_str = strtol(buf, NULL, 0);
-  const uint8_t conf_key = recv_str.substring(recv_str.length() - 2).toInt();
-  const uint16_t conf_value = recv_str.substring(0, recv_str.length() - 2).toInt();
+  str.toCharArray(buf, sizeof(buf));
+  str = strtol(buf, NULL, 0);
+  const uint8_t conf_key = str.substring(str.length() - 2).toInt();
+  const uint16_t conf_value = str.substring(0, str.length() - 2).toInt();
   if (conf_key == 1) {
     conf.period = conf_value;
   } else if (conf_key == 2) {
@@ -516,12 +522,31 @@ void lppDownDec(String recv_str) {
   }  
 }
 void atRakWake() {  
-  clearSerial();  
   Serial.println(F("w"));
-  Serial.find(F("8,0,0\r\n"));
+  const String str = serialReadLine(wdtMs60000);
+  if (!str.endsWith(F("8,0,0"))) {
+    while(true);
+  }   
+}
+String serialReadLine(const unsigned long wdtMs) {  
+  String str;
+  unsigned long startMs = millis();
+  while ((unsigned long)(millis() - startMs) < wdtMs) {    
+    while (Serial.available()) {
+      const char inChar = (char)Serial.read();
+      str += inChar;
+      if (inChar == '\n') {
+        str.trim(); 
+        return str;
+      }
+    }
+    wdt_reset();
+  }
+  if (wdtMs == wdtMs60000) {
+    while (true);
+  }     
 }
 void clearSerial() {
-  wdt_reset();
   Serial.flush();
   while (Serial.available()) {
     Serial.read();
