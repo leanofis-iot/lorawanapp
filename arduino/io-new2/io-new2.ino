@@ -29,23 +29,22 @@ const uint8_t _5v = 2;
 const uint8_t _10v = 3;
 const uint8_t _ntc = 4;
 
-float analog;
-bool isAnalogAlarmChanged, isAnalogAlarmFlag, isBatteryLowChanged, isBatteryLowFlag, isExtInt, isPowerUp = true;
+float analogVolt, batteryVolt;
+const uint16_t voutOnTime = 1;
+const uint8_t anSampNum = 3, anSampDly = 1;
+bool isAnAlarm, isAnAlarmFlag, isBatLow, isBatLowFlag, isExtInt, isPowerUp = true;
 const unsigned long wdtMs60000 = 60000;
 const unsigned long wdtMs100 = 100; 
 
 struct Conf {
   uint16_t period;
-  uint16_t pow_tm;
   float bat_lo_v;
   uint8_t interface;
   uint8_t sensor;
   float ntc_tmp;
   float ntc_res; 
   float ntc_beta; 
-  float ntc_ser_res;
-  uint8_t an_num_samp;
-  uint8_t an_dly_samp;
+  float ntc_ser_res;  
   uint8_t an_alr_en;
   float an_alr_hi_set;
   float an_alr_hi_clr;
@@ -80,7 +79,7 @@ void loop() {
     LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); 
     wdt_enable(WDTO_8S);
     readAll();    
-    if (isAnalogAlarmChanged || isBatteryLowChanged || isExtInt) {
+    if (isAnAlarm || isBatLow || isExtInt) {
       uplink(); 
     }    
   }   
@@ -90,20 +89,20 @@ void uplink() {
   lpp.reset();
   if (conf.interface == _an) {  
     if (conf.sensor == _ntc) {      
-      lpp.addTemperature(1, analog);
+      lpp.addTemperature(1, analogVolt);
     } else if (conf.sensor == _3v || conf.sensor == _5v || conf.sensor == _10v ) {
-      lpp.addAnalogInput(1, analog);
+      lpp.addAnalogInput(1, analogVolt);
     }
   } else if (conf.interface == _dig) {
     lpp.addDigitalInput(1, digitalRead(IN1D_PIN));
   }
-  lpp.addAnalogInput(3, isBatteryLowFlag);
+  lpp.addAnalogInput(10, batteryVolt);
   if (isPowerUp) {
     isPowerUp = false;
-    lpp.addAnalogOutput(100, 0);
+    lpp.addAnalogOutput(11, 0);
   }
   atRakWake();
-  atRakSend("at+send=0,2," + *lpp.getBuffer());  
+  atRakSend(lpp.getBuffer());  
   atRakSleep();  
 }
 void readAll() {
@@ -127,77 +126,89 @@ void readAll() {
   checkBatteryLow();  
 }
 void readAnalog() {
-  power_adc_enable();
-  uint16_t samples[conf.an_num_samp];
-  uint8_t i;
+  power_adc_enable();  
   if (conf.sensor == _ntc) {
     analogReference(DEFAULT);
   } else {
     analogReference(INTERNAL);
   }   
   digitalWrite(VOUT_CNT_PIN, LOW);
-  delay(conf.pow_tm);
-  for (i=0; i< conf.an_num_samp; i++) {
+  delay(voutOnTime);
+  uint16_t samples[anSampNum];
+  uint8_t i;
+  for (i=0; i< anSampNum; i++) {
     samples[i] = analogRead(IN1A_PIN);
-    delay(conf.an_dly_samp);
+    delay(anSampDly);
   } 
   digitalWrite(VOUT_CNT_PIN, HIGH); 
   power_adc_disable(); 
-  analog = 0;
-  for (i=0; i< conf.an_num_samp; i++) {
-    analog += samples[i];
+  analogVolt = 0;
+  for (i=0; i< anSampNum; i++) {
+    analogVolt += samples[i];
   }
-  analog /= conf.an_num_samp; 
+  analogVolt /= anSampNum; 
 }
 void calcNtc() { 
-  analog = 1023 / analog - 1;
-  analog = conf.ntc_ser_res / analog;  
-  analog = analog / conf.ntc_res;     
-  analog = log(analog);                  
-  analog /= conf.ntc_beta;                   
-  analog += 1.0 / (conf.ntc_tmp + 273.15); 
-  analog = 1.0 / analog;                 
-  analog -= 273.15;   
+  analogVolt = 1023 / analogVolt - 1;
+  analogVolt = conf.ntc_ser_res / analogVolt;  
+  analogVolt = analogVolt / conf.ntc_res;     
+  analogVolt = log(analogVolt);                  
+  analogVolt /= conf.ntc_beta;                   
+  analogVolt += 1.0 / (conf.ntc_tmp + 273.15); 
+  analogVolt = 1.0 / analogVolt;                 
+  analogVolt -= 273.15;   
 }
 void calc3v() {
-  analog = ( analog / 1023 ) * 3;
+  analogVolt = ( analogVolt / 1023 ) * 3;
 }
 void calc5v() {
-  analog = ( analog / 1023 ) * 5;
+  analogVolt = ( analogVolt / 1023 ) * 5;
 }
 void calc10v() {
-  analog = ( analog / 1023 ) * 10;
+  analogVolt = ( analogVolt / 1023 ) * 10;
 }
 void checkAnalogAlarm() {  
-  const bool isAnalogAlarmLog = isAnalogAlarmFlag; 
-  if (analog >= conf.an_alr_hi_set || analog <= conf.an_alr_lo_set) {
-    isAnalogAlarmFlag = true;    
-  } else if (analog <= conf.an_alr_hi_clr || analog >= conf.an_alr_lo_clr) {
-    isAnalogAlarmFlag = false;
+  const bool isAnAlarmLog = isAnAlarmFlag; 
+  if (analogVolt >= conf.an_alr_hi_set || analogVolt <= conf.an_alr_lo_set) {
+    isAnAlarmFlag = true;    
+  } else if (analogVolt <= conf.an_alr_hi_clr || analogVolt >= conf.an_alr_lo_clr) {
+    isAnAlarmFlag = false;
   }
-  if (isAnalogAlarmFlag != isAnalogAlarmLog) {
-    isAnalogAlarmChanged = true;  
+  if (isAnAlarmFlag != isAnAlarmLog) {
+    isAnAlarm = true;  
   } else {
-    isAnalogAlarmChanged = false;
+    isAnAlarm = false;
   }
 }
 void checkBatteryLow() {
+  power_adc_enable();
   analogReference(INTERNAL);
   digitalWrite(BAT_CNT_PIN, LOW);
-  delay(conf.pow_tm);
-  uint16_t bat_value = analogRead(BAT_PIN);
-  digitalWrite(BAT_CNT_PIN, HIGH);
-  float battery = ( bat_value / 1023 ) * 3.6;
-  const bool isBatteryLowLog = isBatteryLowFlag; 
-  if (battery < conf.bat_lo_v) {
-    isBatteryLowFlag = true;   
-  } else {
-    isBatteryLowFlag = false;
+  delay(voutOnTime);
+  uint16_t samples[anSampNum];
+  uint8_t i;
+  for (i=0; i< anSampNum; i++) {
+    samples[i] = analogRead(BAT_PIN);
+    delay(anSampDly);
+  } 
+  digitalWrite(BAT_CNT_PIN, HIGH); 
+  power_adc_disable(); 
+  batteryVolt = 0;
+  for (i=0; i< anSampNum; i++) {
+    batteryVolt += samples[i];
   }
-  if (isBatteryLowFlag != isBatteryLowLog) {
-    isBatteryLowChanged = true;  
+  batteryVolt /= anSampNum;   
+  batteryVolt = ( batteryVolt / 1023 ) * 3.6;
+  const bool isBatLowLog = isBatLowFlag; 
+  if (batteryVolt < conf.bat_lo_v) {
+    isBatLowFlag = true;   
   } else {
-    isBatteryLowChanged = false;
+    isBatLowFlag = false;
+  }
+  if (isBatLowFlag != isBatLowLog) {
+    isBatLow = true;  
+  } else {
+    isBatLow = false;
   }
 }
 void setupPins() {
@@ -215,8 +226,8 @@ void setupPins() {
   digitalWrite(VOUT_CNT_PIN, HIGH);
   digitalWrite(BAT_CNT_PIN, HIGH);
   digitalWrite(RAK_RES_PIN, HIGH);
-  digitalWrite(OUT1_PIN, HIGH);
-  digitalWrite(OUT2_PIN, HIGH);
+  digitalWrite(OUT1_PIN, LOW);
+  digitalWrite(OUT2_PIN, LOW);
 }
 void setupPeripheral() {
   digitalWrite(RAK_RES_PIN, LOW);
@@ -247,188 +258,156 @@ void checkExtInt() {
   detachInterrupt(digitalPinToInterrupt(IN1D_PIN));
 }
 void setupUsb() {   
-  String str; 
+  String strSerial, strUsbSerial; 
   while (true) { 
     if (usbSerial.available()) {
-      str = "";
-      str = usbSerial.readStringUntil('\n');
-      str.trim();
-      if (str.startsWith(F("at"))) {       
-        Serial.println(str);
-      } else if (str.startsWith(F("period"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("period="), "");
-          conf.period = str.toInt();
+      strUsbSerial = usbSerialReadLine();
+      if (strUsbSerial.startsWith(F("at"))) {       
+        Serial.println(strUsbSerial);
+      } else if (strUsbSerial.startsWith(F("period"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("period="), "");
+          conf.period = strUsbSerial.toInt();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
           usbSerial.print(F("OK"));
           usbSerial.println(conf.period);
-        }  
-      } else if (str.startsWith(F("pow_tm"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("pow_tm="), "");
-          conf.pow_tm = str.toInt();
-          EEPROM.put(0, conf);
-          usbSerial.println(F("OK"));
-        } else {
-          usbSerial.print(F("OK"));
-          usbSerial.println(conf.pow_tm);
-        } 
-      } else if (str.startsWith(F("bat_lo_v"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("bat_lo_v="), "");
-          conf.bat_lo_v = str.toFloat();
+        }       
+      } else if (strUsbSerial.startsWith(F("bat_lo_v"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("bat_lo_v="), "");
+          conf.bat_lo_v = strUsbSerial.toFloat();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
           usbSerial.print(F("OK"));
           usbSerial.println(conf.bat_lo_v);
         }  
-      } else if (str.startsWith(F("interface"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("interface="), "");
-          conf.interface = str.toInt();
+      } else if (strUsbSerial.startsWith(F("interface"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("interface="), "");
+          conf.interface = strUsbSerial.toInt();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
           usbSerial.print(F("OK"));
           usbSerial.println(conf.interface);
         }  
-      } else if (str.startsWith(F("sensor"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("sensor="), "");
-          conf.sensor = str.toInt();
+      } else if (strUsbSerial.startsWith(F("sensor"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("sensor="), "");
+          conf.sensor = strUsbSerial.toInt();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
           usbSerial.print(F("OK"));
           usbSerial.println(conf.sensor);
         }  
-      } else if (str.startsWith(F("ntc_tmp"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("ntc_tmp="), "");
-          conf.ntc_tmp = str.toFloat();
+      } else if (strUsbSerial.startsWith(F("ntc_tmp"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("ntc_tmp="), "");
+          conf.ntc_tmp = strUsbSerial.toFloat();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
           usbSerial.print(F("OK"));
           usbSerial.println(conf.ntc_tmp);
         }   
-      } else if (str.startsWith(F("ntc_res"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("ntc_res="), "");
-          conf.ntc_res = str.toFloat();
+      } else if (strUsbSerial.startsWith(F("ntc_res"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("ntc_res="), "");
+          conf.ntc_res = strUsbSerial.toFloat();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
           usbSerial.print(F("OK"));
           usbSerial.println(conf.ntc_res);
         } 
-      } else if (str.startsWith(F("ntc_beta"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("ntc_beta="), "");
-          conf.ntc_beta = str.toFloat();
+      } else if (strUsbSerial.startsWith(F("ntc_beta"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("ntc_beta="), "");
+          conf.ntc_beta = strUsbSerial.toFloat();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
           usbSerial.print(F("OK"));
           usbSerial.println(conf.ntc_beta);
         } 
-      } else if (str.startsWith(F("ntc_ser_res"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("ntc_ser_res="), "");
-          conf.ntc_ser_res = str.toFloat();
+      } else if (strUsbSerial.startsWith(F("ntc_ser_res"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("ntc_ser_res="), "");
+          conf.ntc_ser_res = strUsbSerial.toFloat();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
           usbSerial.print(F("OK"));
           usbSerial.println(conf.ntc_ser_res);
-        }
-      } else if (str.startsWith(F("an_num_samp"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("an_num_samp="), "");
-          conf.an_num_samp = str.toInt();
-          EEPROM.put(0, conf);
-          usbSerial.println(F("OK"));
-        } else {
-          usbSerial.print(F("OK"));
-          usbSerial.println(conf.an_num_samp);
-        }    
-      } else if (str.startsWith(F("an_dly_samp"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("an_dly_samp="), "");
-          conf.an_dly_samp = str.toInt();
-          EEPROM.put(0, conf);
-          usbSerial.println(F("OK"));
-        } else {
-          usbSerial.print(F("OK"));
-          usbSerial.println(conf.an_dly_samp);
-        }         
-      } else if (str.startsWith(F("an_alr_en"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("an_alr_en="), "");
-          conf.an_alr_en = str.toInt();
+        }      
+      } else if (strUsbSerial.startsWith(F("an_alr_en"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("an_alr_en="), "");
+          conf.an_alr_en = strUsbSerial.toInt();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
           usbSerial.print(F("OK"));
           usbSerial.println(conf.an_alr_en);
         }  
-      } else if (str.startsWith(F("an_alr_hi_set"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("an_alr_hi_set="), "");
-          conf.an_alr_hi_set = str.toFloat();
+      } else if (strUsbSerial.startsWith(F("an_alr_hi_set"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("an_alr_hi_set="), "");
+          conf.an_alr_hi_set = strUsbSerial.toFloat();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
           usbSerial.print(F("OK"));
           usbSerial.println(conf.an_alr_hi_set);
         } 
-      } else if (str.startsWith(F("an_alr_hi_clr"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("an_alr_hi_clr="), "");
-          conf.an_alr_hi_clr = str.toFloat();
+      } else if (strUsbSerial.startsWith(F("an_alr_hi_clr"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("an_alr_hi_clr="), "");
+          conf.an_alr_hi_clr = strUsbSerial.toFloat();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
           usbSerial.print(F("OK"));
           usbSerial.println(conf.an_alr_hi_clr);
         }  
-      } else if (str.startsWith(F("an_alr_lo_set"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("an_alr_lo_set="), "");
-          conf.an_alr_lo_set = str.toFloat();
+      } else if (strUsbSerial.startsWith(F("an_alr_lo_set"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("an_alr_lo_set="), "");
+          conf.an_alr_lo_set = strUsbSerial.toFloat();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
           usbSerial.print(F("OK"));
           usbSerial.println(conf.an_alr_lo_set);
         }   
-      } else if (str.startsWith(F("an_alr_lo_clr"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("an_alr_lo_clr="), "");
-          conf.an_alr_lo_clr = str.toFloat();
+      } else if (strUsbSerial.startsWith(F("an_alr_lo_clr"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("an_alr_lo_clr="), "");
+          conf.an_alr_lo_clr = strUsbSerial.toFloat();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
           usbSerial.print(F("OK"));
           usbSerial.println(conf.an_alr_lo_clr);
         }
-      } else if (str.startsWith(F("dig_alr_hi_en"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("dig_alr_hi_en="), "");
-          conf.dig_alr_hi_en = str.toInt();
+      } else if (strUsbSerial.startsWith(F("dig_alr_hi_en"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("dig_alr_hi_en="), "");
+          conf.dig_alr_hi_en = strUsbSerial.toInt();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
           usbSerial.print(F("OK"));
           usbSerial.println(conf.dig_alr_hi_en);
         }   
-      } else if (str.startsWith(F("dig_alr_lo_en"))) {
-        if (str.indexOf(F("=")) >= 0) {
-          str.replace(F("dig_alr_lo_en="), "");
-          conf.dig_alr_lo_en = str.toInt();
+      } else if (strUsbSerial.startsWith(F("dig_alr_lo_en"))) {
+        if (strUsbSerial.indexOf(F("=")) >= 0) {
+          strUsbSerial.replace(F("dig_alr_lo_en="), "");
+          conf.dig_alr_lo_en = strUsbSerial.toInt();
           EEPROM.put(0, conf);
           usbSerial.println(F("OK"));
         } else {
@@ -438,44 +417,50 @@ void setupUsb() {
       }       
     }
     if (Serial.available()) {
-      str = "";
-      str = Serial.readStringUntil('\n');
-      str.trim();    
-      usbSerial.println(str);   
+      strSerial = serialReadLine();   
+      usbSerial.println(strSerial);   
     }      
   }    
 }
 void atRakSleep() {  
   Serial.println(F("at+sleep"));
-  const String str = serialReadLine(wdtMs60000);
+  String str;
+  str = RakReadLine(wdtMs60000);
   if (!str.endsWith(F("OK"))) {
     while(true);
   }
 }
 void atRakJoinOtaa() {  
   Serial.println(F("at+join=otaa"));
-  const String str = serialReadLine(wdtMs60000);
+  String str;
+  str = RakReadLine(wdtMs60000);
+  if (!str.endsWith(F("OK"))) {
+    while(true);
+  }
+  str = RakReadLine(wdtMs60000);
   if (!str.endsWith(F("3,0,0"))) {
     while(true);
   } 
 }
-void atRakSend(const String message) {  
-  Serial.println(message);
-  String str;
-  str = serialReadLine(wdtMs60000);
+void atRakSend(String str) { 
+  str = "at+send=0,2," + str; 
+  Serial.println(str);
+  str = RakReadLine(wdtMs60000);
   if (!str.endsWith(F("OK"))) {
     while(true);
   }
-  str = serialReadLine(wdtMs60000);
+  str = RakReadLine(wdtMs60000);
   if (!str.endsWith(F("2,0,0"))) {
     while(true);
   } 
-  str = serialReadLine(wdtMs100);
-  const uint8_t i = str.lastIndexOf(',');
-  str = str.substring(i + 3);
-  str.replace("ff", "");
-  lppDownDec(str);
-  EEPROM.put(0, conf);     
+  str = RakReadLine(wdtMs100);
+  if (str) {
+    const uint8_t i = str.lastIndexOf(',');
+    str = str.substring(i + 3);
+    str.replace("ff", "");
+    lppDownDec(str);
+    EEPROM.put(0, conf);
+  }     
 }
 void lppDownDec(String str) {
   const char buf[4];
@@ -484,51 +469,50 @@ void lppDownDec(String str) {
   const uint8_t conf_key = str.substring(str.length() - 2).toInt();
   const uint16_t conf_value = str.substring(0, str.length() - 2).toInt();
   if (conf_key == 1) {
-    conf.period = conf_value;
+    conf.period = conf_value;  
   } else if (conf_key == 2) {
-    conf.pow_tm = conf_value;
-  } else if (conf_key == 3) {
     conf.bat_lo_v = conf_value;
-  } else if (conf_key == 4) {
+  } else if (conf_key == 3) {
     conf.interface = conf_value;
-  } else if (conf_key == 5) {
+  } else if (conf_key == 4) {
     conf.sensor = conf_value;
-  } else if (conf_key == 6) {
+  } else if (conf_key == 5) {
     conf.ntc_tmp = conf_value;
-  } else if (conf_key == 7) {
+  } else if (conf_key == 6) {
     conf.ntc_res = conf_value;
-  } else if (conf_key == 8) {
+  } else if (conf_key == 7) {
     conf.ntc_beta = conf_value;
+  } else if (conf_key == 8) {
+    conf.ntc_ser_res = conf_value;  
   } else if (conf_key == 9) {
-    conf.ntc_ser_res = conf_value;
-  } else if (conf_key == 10) {
-    conf.an_num_samp = conf_value;
-  } else if (conf_key == 11) {
-    conf.an_dly_samp = conf_value;
-  } else if (conf_key == 12) {
     conf.an_alr_en = conf_value;
-  } else if (conf_key == 13) {
+  } else if (conf_key == 10) {
     conf.an_alr_hi_set = conf_value;
-  } else if (conf_key == 14) {
+  } else if (conf_key == 11) {
     conf.an_alr_hi_clr = conf_value;
-  } else if (conf_key == 15) {
+  } else if (conf_key == 12) {
     conf.an_alr_lo_set = conf_value;
-  } else if (conf_key == 16) {
+  } else if (conf_key == 13) {
     conf.an_alr_lo_clr = conf_value;
-  } else if (conf_key == 17) {
+  } else if (conf_key == 14) {
     conf.dig_alr_hi_en = conf_value;
-  } else if (conf_key == 18) {
+  } else if (conf_key == 15) {
     conf.dig_alr_lo_en = conf_value;    
   }  
 }
 void atRakWake() {  
   Serial.println(F("w"));
-  const String str = serialReadLine(wdtMs60000);
+  String str;
+  str = RakReadLine(wdtMs60000);
+  if (!str.endsWith(F("OK"))) {
+    while(true);
+  }
+  str = RakReadLine(wdtMs60000);
   if (!str.endsWith(F("8,0,0"))) {
     while(true);
   }   
 }
-String serialReadLine(const unsigned long wdtMs) {  
+String RakReadLine(const unsigned long wdtMs) {  
   String str;
   unsigned long startMs = millis();
   while ((unsigned long)(millis() - startMs) < wdtMs) {    
@@ -542,20 +526,49 @@ String serialReadLine(const unsigned long wdtMs) {
     }
     wdt_reset();
   }
+  str = "";
   if (wdtMs == wdtMs60000) {
     while (true);
   }     
 }
+String serialReadLine() {  
+  String str;  
+  while (Serial.available()) {
+    const char inChar = (char)Serial.read();
+    str += inChar;
+    if (inChar == '\n') {
+      str.trim(); 
+      return str;
+    }
+    // delay(2);
+  }  
+}
+String usbSerialReadLine() {  
+  String str;  
+  while (usbSerial.available()) {
+    const char inChar = (char)usbSerial.read();
+    str += inChar;
+    if (inChar == '\n') {
+      str.trim(); 
+      return str;
+    }
+    // delay(2);
+  }  
+}
 void clearSerial() {
   Serial.flush();
+  // delay(2);
   while (Serial.available()) {
     Serial.read();
+    // delay(2);
   }
 }
 void clearUsbSerial() {
   usbSerial.flush();
+  // delay(2);
   while (usbSerial.available()) {
     usbSerial.read();
+    // delay(2);
   }
 }
 void wakeUp() {   
