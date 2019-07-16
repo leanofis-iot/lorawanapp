@@ -31,7 +31,7 @@ const uint8_t _ntc = 4;
 
 float analogVolt, batteryVolt;
 const uint16_t voutOnTime = 1;
-const uint8_t anSampNum = 3, anSampDly = 1;
+const uint8_t anSampNum = 3, anSampDly = 1, digInDebounce = 10;
 bool isAnAlarm, isAnAlarmFlag, isBatLow, isBatLowFlag, isExtInt, isPowerUp = true;
 const unsigned long wdtMs30000 = 30000;
 const unsigned long wdtMs100 = 100; 
@@ -94,12 +94,14 @@ void uplink() {
       lpp.addAnalogInput(1, analogVolt);
     }
   } else if (conf.interface == _dig) {
+    delay(digInDebounce);
     lpp.addDigitalInput(1, digitalRead(IN1D_PIN));
   }
-  lpp.addAnalogInput(10, batteryVolt);
+  lpp.addAnalogInput(20, batteryVolt);
+  lpp.addDigitalOutput(40, ?);
   if (isPowerUp) {
     isPowerUp = false;
-    lpp.addAnalogOutput(11, 0);
+    lpp.addAnalogOutput(30, 0);
   }
   atRakWake();
   atRakSend(lpp.getBuffer());  
@@ -456,15 +458,16 @@ void atRakSend(String str) {
     resetMe();
   } 
   str = RakReadLine(wdtMs100);
-  if (str) {
+  if (str.endsWith(F("ff")) {
     str.replace("ff", "");
     const uint8_t i = str.lastIndexOf(',');
-    str = str.substring(i + 3);    
+    str = str.substring(i + 1);    
     lppDownlinkDec(str);
     EEPROM.put(0, conf);
   }     
 }
 void lppDownlinkDec(String str) {
+  const
   char buf[4];
   str.toCharArray(buf, sizeof(buf));
   str = strtol(buf, NULL, 0);
@@ -515,10 +518,8 @@ void lppDownlinkDec(String str) {
   } else if (confKey == 15) {
     conf.dig_alr_lo_en = confValue;
     EEPROM.put(0, conf);
-  } else if (confKey == 31) {
-    digitalWrite(OUT1_PIN, confValue); 
-  } else if (confKey == 41) {
-    resetMe();
+  } else if (confKey == 99) {
+    resetMe();  
   }   
 }
 void atRakWake() {  
