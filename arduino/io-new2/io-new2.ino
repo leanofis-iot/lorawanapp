@@ -59,14 +59,14 @@ AltSoftSerial usbSerial;
 CayenneLPP lpp(51);
 
 void setup() {
-  setupPins();
-  setupPeripheral();  
-  setupConf();
+  setPins();
+  EEPROM.get(0, conf);
+  setPeripheral();  
   Serial.begin(115200);  
   usbSerial.begin(9600); 
   delay(3000);
   if (digitalRead(USB_PIN) == HIGH) {
-    setupUsb();
+    setUsb();
   }   
   wdt_enable(WDTO_8S);
   atRakJoinOtaa();
@@ -200,7 +200,7 @@ void checkBatteryLow() {
   batteryVolt /= anSampNum;   
   batteryVolt = ( batteryVolt / 1023 ) * 3.6;
   const bool isBatLowLog = isBatLowFlag; 
-  if (batteryVolt < conf.bat_lo_v) {
+  if (batteryVolt <= conf.bat_lo_v) {
     isBatLowFlag = true;   
   } else {
     isBatLowFlag = false;
@@ -211,7 +211,7 @@ void checkBatteryLow() {
     isBatLow = false;
   }
 }
-void setupPins() {
+void setPins() {
   pinMode(VOUT_CNT_PIN, OUTPUT);
   pinMode(BAT_PIN, INPUT);
   pinMode(BAT_CNT_PIN, OUTPUT);
@@ -229,16 +229,13 @@ void setupPins() {
   digitalWrite(OUT1_PIN, LOW);
   digitalWrite(OUT2_PIN, LOW);
 }
-void setupPeripheral() {
-  digitalWrite(RAK_RES_PIN, LOW);
-  delay(10);
-  digitalWrite(RAK_RES_PIN, HIGH);
-}
-void setupConf() {
-  EEPROM.get(0, conf);
+void setPeripheral() {
   if (conf.interface == _dig) {
     digitalWrite(VOUT_CNT_PIN, LOW);       
   }
+  digitalWrite(RAK_RES_PIN, LOW);
+  delay(10);
+  digitalWrite(RAK_RES_PIN, HIGH);
 }
 void setupAttachInt() {
   if (conf.dig_alr_hi_en && conf.dig_alr_lo_en) {
@@ -257,7 +254,7 @@ void checkExtInt() {
   }
   detachInterrupt(digitalPinToInterrupt(IN1D_PIN));
 }
-void setupUsb() {
+void setUsb() {
   String str;
   while (true) {   
     if (usbSerial.available()) {
@@ -416,7 +413,7 @@ void setupUsb() {
           } else {
             usbSerial.print(F("OK"));
             usbSerial.println(conf.dig_alr_lo_en);
-          }               
+          }                    
         }
         str = "";        
       }      
@@ -432,7 +429,7 @@ void atRakSleep() {
   String str;
   str = RakReadLine(wdtMs60000);
   if (!str.endsWith(F("OK"))) {
-    while(true);
+    resetMe();
   }
 }
 void atRakJoinOtaa() {  
@@ -440,11 +437,11 @@ void atRakJoinOtaa() {
   String str;
   str = RakReadLine(wdtMs60000);
   if (!str.endsWith(F("OK"))) {
-    while(true);
+    resetMe();
   }
   str = RakReadLine(wdtMs60000);
   if (!str.endsWith(F("3,0,0"))) {
-    while(true);
+    resetMe();
   } 
 }
 void atRakSend(String str) { 
@@ -452,57 +449,80 @@ void atRakSend(String str) {
   Serial.println(str);
   str = RakReadLine(wdtMs60000);
   if (!str.endsWith(F("OK"))) {
-    while(true);
+    resetMe();
   }
   str = RakReadLine(wdtMs60000);
   if (!str.endsWith(F("2,0,0"))) {
-    while(true);
+    resetMe();
   } 
   str = RakReadLine(wdtMs100);
   if (str) {
-    const uint8_t i = str.lastIndexOf(',');
-    str = str.substring(i + 3);
     str.replace("ff", "");
-    lppDownDec(str);
+    const uint8_t i = str.lastIndexOf(',');
+    str = str.substring(i + 3);    
+    lppDownlinkDec(str);
     EEPROM.put(0, conf);
   }     
 }
-void lppDownDec(String str) {
-  const char buf[4];
+void lppDownlinkDec(String str) {
+  char buf[4];
   str.toCharArray(buf, sizeof(buf));
   str = strtol(buf, NULL, 0);
-  const uint8_t conf_key = str.substring(str.length() - 2).toInt();
-  const uint16_t conf_value = str.substring(0, str.length() - 2).toInt();
-  if (conf_key == 1) {
-    conf.period = conf_value;  
-  } else if (conf_key == 2) {
-    conf.bat_lo_v = conf_value;
-  } else if (conf_key == 3) {
-    conf.interface = conf_value;
-  } else if (conf_key == 4) {
-    conf.sensor = conf_value;
-  } else if (conf_key == 5) {
-    conf.ntc_tmp = conf_value;
-  } else if (conf_key == 6) {
-    conf.ntc_res = conf_value;
-  } else if (conf_key == 7) {
-    conf.ntc_beta = conf_value;
-  } else if (conf_key == 8) {
-    conf.ntc_ser_res = conf_value;  
-  } else if (conf_key == 9) {
-    conf.an_alr_en = conf_value;
-  } else if (conf_key == 10) {
-    conf.an_alr_hi_set = conf_value;
-  } else if (conf_key == 11) {
-    conf.an_alr_hi_clr = conf_value;
-  } else if (conf_key == 12) {
-    conf.an_alr_lo_set = conf_value;
-  } else if (conf_key == 13) {
-    conf.an_alr_lo_clr = conf_value;
-  } else if (conf_key == 14) {
-    conf.dig_alr_hi_en = conf_value;
-  } else if (conf_key == 15) {
-    conf.dig_alr_lo_en = conf_value;    
+  const uint8_t confKey = str.substring(str.length() - 2).toInt();
+  const uint16_t confValue = str.substring(0, str.length() - 2).toInt();
+  if (confKey == 1) {
+    conf.period = confValue;
+    EEPROM.put(0, conf);  
+  } else if (confKey == 2) {
+    conf.bat_lo_v = confValue;
+    EEPROM.put(0, conf);
+  } else if (confKey == 3) {
+    conf.interface = confValue;
+    EEPROM.put(0, conf);
+  } else if (confKey == 4) {
+    conf.sensor = confValue;
+    EEPROM.put(0, conf);
+  } else if (confKey == 5) {
+    conf.ntc_tmp = confValue;
+    EEPROM.put(0, conf);
+  } else if (confKey == 6) {
+    conf.ntc_res = confValue;
+    EEPROM.put(0, conf);
+  } else if (confKey == 7) {
+    conf.ntc_beta = confValue;
+    EEPROM.put(0, conf);
+  } else if (confKey == 8) {
+    conf.ntc_ser_res = confValue;
+    EEPROM.put(0, conf);  
+  } else if (confKey == 9) {
+    conf.an_alr_en = confValue;
+    EEPROM.put(0, conf);
+  } else if (confKey == 10) {
+    conf.an_alr_hi_set = confValue;
+    EEPROM.put(0, conf);
+  } else if (confKey == 11) {
+    conf.an_alr_hi_clr = confValue;
+    EEPROM.put(0, conf);
+  } else if (confKey == 12) {
+    conf.an_alr_lo_set = confValue;
+    EEPROM.put(0, conf);
+  } else if (confKey == 13) {
+    conf.an_alr_lo_clr = confValue;
+    EEPROM.put(0, conf);
+  } else if (confKey == 14) {
+    conf.dig_alr_hi_en = confValue;
+    EEPROM.put(0, conf);
+  } else if (confKey == 15) {
+    conf.dig_alr_lo_en = confValue;
+    EEPROM.put(0, conf);
+  } else if (confKey == 31) {
+    digitalWrite(OUT1_PIN, confValue); 
+  } else if (confKey == 32) {
+    digitalWrite(OUT2_PIN, confValue);
+  } else if (confKey == 51) {
+    resetMe(); 
+  } else if (confKey == 52) {
+    restoreMe();        
   }  
 }
 void atRakWake() {  
@@ -510,11 +530,11 @@ void atRakWake() {
   String str;
   str = RakReadLine(wdtMs60000);
   if (!str.endsWith(F("OK"))) {
-    while(true);
+    resetMe();
   }
   str = RakReadLine(wdtMs60000);
   if (!str.endsWith(F("8,0,0"))) {
-    while(true);
+    resetMe();
   }   
 }
 String RakReadLine(const unsigned long wdtMs) {  
@@ -533,24 +553,31 @@ String RakReadLine(const unsigned long wdtMs) {
   }
   str = "";
   if (wdtMs == wdtMs60000) {
-    while (true);
+    resetMe();
   }     
 }
-void clearSerial() {
-  Serial.flush();
-  // delay(2);
-  while (Serial.available()) {
-    Serial.read();
-    // delay(2);
-  }
+void resetMe() {
+  wdt_enable(WDTO_15MS);
+  while(true); 
 }
-void clearUsbSerial() {
-  usbSerial.flush();
-  // delay(2);
-  while (usbSerial.available()) {
-    usbSerial.read();
-    // delay(2);
-  }
+void restoreMe() {  
+  conf.period = 10;
+  conf.bat_lo_v = 3.2;
+  conf.interface = _an;
+  conf.sensor = _ntc;
+  conf.ntc_tmp = 25;
+  conf.ntc_res = 10000;
+  conf.ntc_beta = 3950;
+  conf.ntc_ser_res = 10000;
+  conf.an_alr_en = 1;
+  conf.an_alr_hi_set = 50;
+  conf.an_alr_hi_clr = 45;
+  conf.an_alr_lo_set = 20;
+  conf.an_alr_lo_clr = 15;
+  conf.dig_alr_hi_en = 1;
+  conf.dig_alr_lo_en = 1; 
+  EEPROM.put(0, conf); 
+  resetMe();
 }
 void wakeUp() {   
 }
