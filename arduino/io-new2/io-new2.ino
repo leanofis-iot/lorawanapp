@@ -33,7 +33,7 @@ float analogVolt, batteryVolt;
 const uint16_t voutOnTime = 1;
 const uint8_t anSampNum = 3, anSampDly = 1;
 bool isAnAlarm, isAnAlarmFlag, isBatLow, isBatLowFlag, isExtInt, isPowerUp = true;
-const unsigned long wdtMs60000 = 60000;
+const unsigned long wdtMs30000 = 30000;
 const unsigned long wdtMs100 = 100; 
 
 struct Conf {
@@ -427,7 +427,7 @@ void setUsb() {
 void atRakSleep() {  
   Serial.println(F("at+sleep"));
   String str;
-  str = RakReadLine(wdtMs60000);
+  str = RakReadLine(wdtMs30000);
   if (!str.endsWith(F("OK"))) {
     resetMe();
   }
@@ -435,11 +435,11 @@ void atRakSleep() {
 void atRakJoinOtaa() {  
   Serial.println(F("at+join=otaa"));
   String str;
-  str = RakReadLine(wdtMs60000);
+  str = RakReadLine(wdtMs30000);
   if (!str.endsWith(F("OK"))) {
     resetMe();
   }
-  str = RakReadLine(wdtMs60000);
+  str = RakReadLine(wdtMs30000);
   if (!str.endsWith(F("3,0,0"))) {
     resetMe();
   } 
@@ -447,11 +447,11 @@ void atRakJoinOtaa() {
 void atRakSend(String str) { 
   str = "at+send=0,2," + str; 
   Serial.println(str);
-  str = RakReadLine(wdtMs60000);
+  str = RakReadLine(wdtMs30000);
   if (!str.endsWith(F("OK"))) {
     resetMe();
   }
-  str = RakReadLine(wdtMs60000);
+  str = RakReadLine(wdtMs30000);
   if (!str.endsWith(F("2,0,0"))) {
     resetMe();
   } 
@@ -517,22 +517,18 @@ void lppDownlinkDec(String str) {
     EEPROM.put(0, conf);
   } else if (confKey == 31) {
     digitalWrite(OUT1_PIN, confValue); 
-  } else if (confKey == 32) {
-    digitalWrite(OUT2_PIN, confValue);
-  } else if (confKey == 51) {
-    resetMe(); 
-  } else if (confKey == 52) {
-    restoreMe();        
-  }  
+  } else if (confKey == 41) {
+    resetMe();
+  }   
 }
 void atRakWake() {  
   Serial.println(F("w"));
   String str;
-  str = RakReadLine(wdtMs60000);
+  str = RakReadLine(wdtMs30000);
   if (!str.endsWith(F("OK"))) {
     resetMe();
   }
-  str = RakReadLine(wdtMs60000);
+  str = RakReadLine(wdtMs30000);
   if (!str.endsWith(F("8,0,0"))) {
     resetMe();
   }   
@@ -552,32 +548,13 @@ String RakReadLine(const unsigned long wdtMs) {
     wdt_reset();
   }
   str = "";
-  if (wdtMs == wdtMs60000) {
+  if (wdtMs == wdtMs30000) {
     resetMe();
   }     
 }
 void resetMe() {
   wdt_enable(WDTO_15MS);
   while(true); 
-}
-void restoreMe() {  
-  conf.period = 10;
-  conf.bat_lo_v = 3.2;
-  conf.interface = _an;
-  conf.sensor = _ntc;
-  conf.ntc_tmp = 25;
-  conf.ntc_res = 10000;
-  conf.ntc_beta = 3950;
-  conf.ntc_ser_res = 10000;
-  conf.an_alr_en = 1;
-  conf.an_alr_hi_set = 50;
-  conf.an_alr_hi_clr = 45;
-  conf.an_alr_lo_set = 20;
-  conf.an_alr_lo_clr = 15;
-  conf.dig_alr_hi_en = 1;
-  conf.dig_alr_lo_en = 1; 
-  EEPROM.put(0, conf); 
-  resetMe();
 }
 void wakeUp() {   
 }
