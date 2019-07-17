@@ -1,8 +1,8 @@
-#include <AltSoftSerial.h>
-#include <EEPROM.h>
 #include <avr/wdt.h>
 #include <avr/power.h>
 #include "LowPower.h"
+#include <AltSoftSerial.h>
+#include <EEPROM.h>
 #include <CayenneLPP.h>
 //#include <stdlib.h>
 
@@ -125,7 +125,7 @@ void readAll() {
       checkAnalogAlarm();      
     }
   }   
-  checkBatteryLow();  
+  checkBatLow();  
 }
 void readAnalog() {
   power_adc_enable();  
@@ -182,7 +182,7 @@ void checkAnalogAlarm() {
     isAnAlarm = false;
   }
 }
-void checkBatteryLow() {
+void checkBatLow() {
   power_adc_enable();
   analogReference(INTERNAL);
   digitalWrite(BAT_CNT_PIN, LOW);
