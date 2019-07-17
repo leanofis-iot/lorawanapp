@@ -97,11 +97,11 @@ void uplink() {
     delay(digInDebounce);
     lpp.addDigitalInput(1, digitalRead(IN1D_PIN));
   }
-  lpp.addAnalogInput(20, batteryVolt);
-  lpp.addDigitalOutput(40, ?);
+  lpp.addAnalogInput(20, batteryVolt);  
   if (isPowerUp) {
     isPowerUp = false;
     lpp.addAnalogOutput(30, 0);
+    lpp.addDigitalOutput(40, digitalRead(OUT1_PIN));
   }
   atRakWake();
   atRakSend(lpp.getBuffer());  
@@ -458,7 +458,7 @@ void atRakSend(String str) {
     resetMe();
   } 
   str = RakReadLine(wdtMs100);
-  if (str.endsWith(F("ff")) {
+  if (str.endsWith(F("ff"))) {
     str.replace("ff", "");
     const uint8_t i = str.lastIndexOf(',');
     str = str.substring(i + 1);    
@@ -467,60 +467,66 @@ void atRakSend(String str) {
   }     
 }
 void lppDownlinkDec(String str) {
-  const
-  char buf[4];
-  str.toCharArray(buf, sizeof(buf));
+  char buf[6];
+  str.substring(0, 2).toCharArray(buf, sizeof(buf));
+  const uint8_t downCh = strtol(buf, NULL, 0);
+  str.substring(2).toCharArray(buf, sizeof(buf));
   str = strtol(buf, NULL, 0);
   const uint8_t confKey = str.substring(str.length() - 2).toInt();
   const uint16_t confValue = str.substring(0, str.length() - 2).toInt();
-  if (confKey == 1) {
-    conf.period = confValue;
-    EEPROM.put(0, conf);  
-  } else if (confKey == 2) {
-    conf.bat_lo_v = confValue;
-    EEPROM.put(0, conf);
-  } else if (confKey == 3) {
-    conf.interface = confValue;
-    EEPROM.put(0, conf);
-  } else if (confKey == 4) {
-    conf.sensor = confValue;
-    EEPROM.put(0, conf);
-  } else if (confKey == 5) {
-    conf.ntc_tmp = confValue;
-    EEPROM.put(0, conf);
-  } else if (confKey == 6) {
-    conf.ntc_res = confValue;
-    EEPROM.put(0, conf);
-  } else if (confKey == 7) {
-    conf.ntc_beta = confValue;
-    EEPROM.put(0, conf);
-  } else if (confKey == 8) {
-    conf.ntc_ser_res = confValue;
-    EEPROM.put(0, conf);  
-  } else if (confKey == 9) {
-    conf.an_alr_en = confValue;
-    EEPROM.put(0, conf);
-  } else if (confKey == 10) {
-    conf.an_alr_hi_set = confValue;
-    EEPROM.put(0, conf);
-  } else if (confKey == 11) {
-    conf.an_alr_hi_clr = confValue;
-    EEPROM.put(0, conf);
-  } else if (confKey == 12) {
-    conf.an_alr_lo_set = confValue;
-    EEPROM.put(0, conf);
-  } else if (confKey == 13) {
-    conf.an_alr_lo_clr = confValue;
-    EEPROM.put(0, conf);
-  } else if (confKey == 14) {
-    conf.dig_alr_hi_en = confValue;
-    EEPROM.put(0, conf);
-  } else if (confKey == 15) {
-    conf.dig_alr_lo_en = confValue;
-    EEPROM.put(0, conf);
-  } else if (confKey == 99) {
-    resetMe();  
-  }   
+  const uint8_t digOutValue = strtol(buf, NULL, 0);
+  if (downCh == 30) {    
+    if (confKey == 1) {
+      conf.period = confValue;
+      EEPROM.put(0, conf);  
+    } else if (confKey == 2) {
+      conf.bat_lo_v = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 3) {
+      conf.interface = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 4) {
+      conf.sensor = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 5) {
+      conf.ntc_tmp = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 6) {
+      conf.ntc_res = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 7) {
+      conf.ntc_beta = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 8) {
+      conf.ntc_ser_res = confValue;
+      EEPROM.put(0, conf);  
+    } else if (confKey == 9) {
+      conf.an_alr_en = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 10) {
+      conf.an_alr_hi_set = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 11) {
+      conf.an_alr_hi_clr = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 12) {
+      conf.an_alr_lo_set = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 13) {
+      conf.an_alr_lo_clr = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 14) {
+      conf.dig_alr_hi_en = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 15) {
+      conf.dig_alr_lo_en = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 99) {
+      resetMe();  
+    }       
+  } else if (downCh == 40) {
+    digitalWrite(OUT1_PIN, digOutValue);
+  }  
 }
 void atRakWake() {  
   Serial.println(F("w"));
