@@ -75,22 +75,14 @@ void loop() {
   }   
   uplink(sht.periodicFetchData());  
 }
-void uplink(SHT31D result) {
-  lpp.reset();
-  lpp.addTemperature(1, result.t);
-  lpp.addRelativeHumidity(2, result.rh);
-  lpp.addAnalogInput(20, batteryVolt); 
-  if (isPowerUp) {
-    isPowerUp = false;
-    lpp.addAnalogOutput(30, 0);    
-  }
-  atRakWake();
-  atRakSend(lpp.getBuffer());  
-  atRakSleep();  
-}
 void readAll() {
   checkExtInt();
   checkBatLow();
+}
+void checkExtInt() {
+  //if (PCIF2 || INTF0) {
+  isExtInt = PCIF2;  
+  detachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN));
 }
 void checkBatLow() {
   power_adc_enable();
@@ -123,6 +115,19 @@ void checkBatLow() {
     isBatLow = false;
   }
 }
+void uplink(SHT31D result) {
+  lpp.reset();
+  lpp.addTemperature(1, result.t);
+  lpp.addRelativeHumidity(2, result.rh);
+  lpp.addAnalogInput(20, batteryVolt); 
+  if (isPowerUp) {
+    isPowerUp = false;
+    lpp.addAnalogOutput(30, 0);    
+  }
+  atRakWake();
+  atRakSend(lpp.getBuffer());  
+  atRakSleep();  
+}
 void setPins() {
   pinMode(VOUT_CNT_PIN, OUTPUT);
   pinMode(BAT_PIN, INPUT);
@@ -150,11 +155,6 @@ void setupSht() {
   sht.periodicStart(SHT3XD_REPEATABILITY_LOW, SHT3XD_FREQUENCY_1HZ);
   sht.writeAlertHigh(conf.tmp_alr_hi_set, conf.tmp_alr_hi_clr, conf.hum_alr_hi_set, conf.hum_alr_hi_clr);
   sht.writeAlertLow(conf.tmp_alr_lo_clr, conf.tmp_alr_lo_set, conf.hum_alr_lo_clr, conf.hum_alr_lo_set); 
-}
-void checkExtInt() {
-  //if (PCIF2 || INTF0) {
-  isExtInt = PCIF2;  
-  detachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN));
 }
 void setUsb() {
   String str;

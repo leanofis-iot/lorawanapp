@@ -85,28 +85,6 @@ void loop() {
   }   
   uplink();  
 }
-void uplink() {  
-  lpp.reset();
-  if (conf.interface == _an) {  
-    if (conf.sensor == _ntc) {      
-      lpp.addTemperature(1, analogVolt);
-    } else if (conf.sensor == _3v || conf.sensor == _5v || conf.sensor == _10v ) {
-      lpp.addAnalogInput(1, analogVolt);
-    }
-  } else if (conf.interface == _dig) {
-    delay(digInDebounce);
-    lpp.addDigitalInput(1, digitalRead(IN1D_PIN));
-  }
-  lpp.addAnalogInput(20, batteryVolt);  
-  if (isPowerUp) {
-    isPowerUp = false;
-    lpp.addAnalogOutput(30, 0);
-    lpp.addDigitalOutput(40, digitalRead(OUT1_PIN));
-  }
-  atRakWake();
-  atRakSend(lpp.getBuffer());  
-  atRakSleep();  
-}
 void readAll() {
   if (conf.interface == _dig) {
     checkExtInt();        
@@ -182,6 +160,14 @@ void checkAnalogAlarm() {
     isAnAlarm = false;
   }
 }
+void checkExtInt() {
+  if (PCIF2 || INTF0 || INTF1) {
+    isExtInt = true;
+  } else {
+    isExtInt = false;
+  }
+  detachInterrupt(digitalPinToInterrupt(IN1D_PIN));
+}
 void checkBatLow() {
   power_adc_enable();
   analogReference(INTERNAL);
@@ -212,6 +198,28 @@ void checkBatLow() {
   } else {
     isBatLow = false;
   }
+}
+void uplink() {  
+  lpp.reset();
+  if (conf.interface == _an) {  
+    if (conf.sensor == _ntc) {      
+      lpp.addTemperature(1, analogVolt);
+    } else if (conf.sensor == _3v || conf.sensor == _5v || conf.sensor == _10v ) {
+      lpp.addAnalogInput(1, analogVolt);
+    }
+  } else if (conf.interface == _dig) {
+    delay(digInDebounce);
+    lpp.addDigitalInput(1, digitalRead(IN1D_PIN));
+  }
+  lpp.addAnalogInput(20, batteryVolt);  
+  if (isPowerUp) {
+    isPowerUp = false;
+    lpp.addAnalogOutput(30, 0);
+    lpp.addDigitalOutput(40, digitalRead(OUT1_PIN));
+  }
+  atRakWake();
+  atRakSend(lpp.getBuffer());  
+  atRakSleep();  
 }
 void setPins() {
   pinMode(VOUT_CNT_PIN, OUTPUT);
@@ -247,14 +255,6 @@ void setupAttachInt() {
   } else if (conf.dig_alr_lo_en) {
     attachInterrupt(digitalPinToInterrupt(IN1D_PIN), wakeUp, FALLING);  
   }
-}
-void checkExtInt() {
-  if (PCIF2 || INTF0 || INTF1) {
-    isExtInt = true;
-  } else {
-    isExtInt = false;
-  }
-  detachInterrupt(digitalPinToInterrupt(IN1D_PIN));
 }
 void setUsb() {
   String str;
