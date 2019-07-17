@@ -426,14 +426,6 @@ void setUsb() {
     }      
   }    
 }
-void atRakSleep() {  
-  Serial.println(F("at+sleep"));
-  String str;
-  str = RakReadLine(wdtMs30000);
-  if (!str.endsWith(F("OK"))) {
-    resetMe();
-  }
-}
 void atRakJoinOtaa() {  
   Serial.println(F("at+join=otaa"));
   String str;
@@ -530,15 +522,19 @@ void lppDownlinkDec(String str) {
 }
 void atRakWake() {  
   Serial.println(F("w"));
+  String str;  
+  str = RakReadLine(wdtMs30000);
+  if (!str.endsWith(F("8,0,0"))) {
+    resetMe();
+  }   
+}
+void atRakSleep() {  
+  Serial.println(F("at+sleep"));
   String str;
   str = RakReadLine(wdtMs30000);
   if (!str.endsWith(F("OK"))) {
     resetMe();
   }
-  str = RakReadLine(wdtMs30000);
-  if (!str.endsWith(F("8,0,0"))) {
-    resetMe();
-  }   
 }
 String RakReadLine(const unsigned long wdtMs) {  
   String str;
