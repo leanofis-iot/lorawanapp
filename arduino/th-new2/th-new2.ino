@@ -31,7 +31,7 @@ const uint8_t SHT_ALR_PIN   = 2;   // PD2/INT0/PCINT18
 
 struct Conf {
   uint16_t period;
-  float bat_lo_v;
+  float bat_lo_v;  
   float tmp_alr_hi_set;
   float tmp_alr_hi_clr;
   float tmp_alr_lo_set;
@@ -39,7 +39,9 @@ struct Conf {
   float hum_alr_hi_set;
   float hum_alr_hi_clr;
   float hum_alr_lo_set;
-  float hum_alr_lo_clr;  
+  float hum_alr_lo_clr;
+  uint8_t temp_en;
+  uint8_t hum_en;  
 };
 
 Conf conf;
@@ -117,8 +119,12 @@ void checkBatLow() {
 }
 void uplink(SHT31D result) {
   lpp.reset();
-  lpp.addTemperature(1, result.t);
-  lpp.addRelativeHumidity(2, result.rh);
+  if (conf.temp_en) {
+    lpp.addTemperature(1, result.t);
+  }
+  if (conf.hum_en) {
+    lpp.addRelativeHumidity(2, result.rh);
+  }  
   lpp.addAnalogInput(20, batteryVolt); 
   if (isPowerUp) {
     isPowerUp = false;
@@ -265,7 +271,27 @@ void setUsb() {
           } else {
             usbSerial.print(F("OK"));
             usbSerial.println(conf.hum_alr_lo_clr);
-          }        
+          }  
+        } else if (str.startsWith(F("temp_en"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("temp_en="), "");
+            conf.temp_en = str.toInt();
+            EEPROM.put(0, conf);
+            usbSerial.println(F("OK"));
+          } else {
+            usbSerial.print(F("OK"));
+            usbSerial.println(conf.temp_en);
+          }  
+        } else if (str.startsWith(F("hum_en"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("hum_en="), "");
+            conf.hum_en = str.toInt();
+            EEPROM.put(0, conf);
+            usbSerial.println(F("OK"));
+          } else {
+            usbSerial.print(F("OK"));
+            usbSerial.println(conf.hum_en);
+          }                    
         }
         str = "";        
       }      
@@ -347,7 +373,13 @@ void lppDownlinkDec(String str) {
       EEPROM.put(0, conf);
     } else if (confKey == 10) {
       conf.hum_alr_lo_clr = confValue;
-      EEPROM.put(0, conf);    
+      EEPROM.put(0, conf); 
+    } else if (confKey == 11) {
+      conf.temp_en = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 12) {
+      conf.hum_en = confValue;
+      EEPROM.put(0, conf);   
     } else if (confKey == 99) {
       resetMe();  
     }     
