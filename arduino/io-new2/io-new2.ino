@@ -439,7 +439,7 @@ void atRakJoinOtaa() {
   } 
 }
 void atRakSend(String str) { 
-  str = "at+send=0,2," + str; 
+  str = "at+send=0,1," + str; 
   Serial.println(str);
   str = RakReadLine(wdtMs30000);
   if (!str.endsWith(F("OK"))) {
