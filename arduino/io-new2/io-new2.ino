@@ -201,6 +201,7 @@ void checkBatLow() {
 }
 void uplink() {  
   lpp.reset();
+  lpp.addAnalogInput(0, batteryVolt);
   if (conf.interface == _an) {  
     if (conf.sensor == _ntc) {      
       lpp.addTemperature(1, analogVolt);
@@ -210,8 +211,7 @@ void uplink() {
   } else if (conf.interface == _dig) {
     delay(digInDebounce);
     lpp.addDigitalInput(1, digitalRead(IN1D_PIN));
-  }
-  lpp.addAnalogInput(20, batteryVolt);  
+  }    
   if (isPowerUp) {
     isPowerUp = false;
     lpp.addAnalogOutput(30, 0);

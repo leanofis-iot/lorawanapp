@@ -119,13 +119,13 @@ void checkBatLow() {
 }
 void uplink(SHT31D result) {
   lpp.reset();
+  lpp.addAnalogInput(0, batteryVolt); 
   if (conf.temp_en) {
     lpp.addTemperature(1, result.t);
   }
   if (conf.hum_en) {
     lpp.addRelativeHumidity(2, result.rh);
-  }  
-  lpp.addAnalogInput(20, batteryVolt); 
+  }    
   if (isPowerUp) {
     isPowerUp = false;
     lpp.addAnalogOutput(30, 0);    
