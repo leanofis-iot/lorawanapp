@@ -55,14 +55,16 @@ void setup() {
   setPeripheral();  
   Serial.begin(115200);  
   usbSerial.begin(9600); 
-  delay(3000);
+  delay(5000);
   if (digitalRead(USB_PIN) == HIGH) {
     setUsb();
   } 
   setupSht();  
   wdt_enable(WDTO_8S);
-  atRakJoinOtaa();
-  readAll();  
+  wdt_reset();
+  readAll();
+  atRakClrSerial();
+  atRakJoinOtaa();    
   uplink(sht.periodicFetchData()); 
 }
 void loop() {  
@@ -70,6 +72,7 @@ void loop() {
     attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUp, CHANGE);
     LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
     wdt_enable(WDTO_8S);
+    wdt_reset();
     readAll();     
     if (isExtInt || isBatLow) {
       uplink(sht.periodicFetchData());      
@@ -301,6 +304,14 @@ void setUsb() {
       usbSerial.print(chrSerial);   
     }      
   }    
+}
+void atRakClrSerial() {
+  String str;
+  while (Serial.available()) {
+    const char inChar = (char)Serial.read();
+  }
+  Serial.println(F("at"));  
+  str = RakReadLine(wdtMs30000);  
 }
 void atRakJoinOtaa() {  
   Serial.println(F("at+join=otaa"));
