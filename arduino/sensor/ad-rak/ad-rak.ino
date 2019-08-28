@@ -8,44 +8,31 @@
 
 const uint8_t ADS_CS_PIN    = 7;   // PE6/AIN0/INT6
 const uint8_t DIN_PIN       = 3;   // PD0/SCL/INT0
-const uint8_t ADS_P_DOWN_1  = 0;   // PD2/RXD1/INT2
-const uint8_t ADS_P_DOWN_0  = 1;   // PD3/TXD1/INT3
 const uint8_t RAK_RES_PIN   = 4;   // PD4/ADC8
 const uint8_t DOUT_PIN      = 6;   // PD7/ADC10
-const uint8_t DIN_P_UP_PIN  = 8;   // PB4/ADC11/PCINT4
-const uint8_t DIN_P_DOWN_PIN= 9;   // PB5/ADC12/PCINT5
 const uint8_t LED_PIN       = 10;  // PB6/ADC13/PCINT6
-const uint8_t ALTSER_TX_PIN = 5;   // PC6
-const uint8_t ALTSER_RX_PIN = 13;  // PC7
+const uint8_t ALT_TX_PIN    = 5;   // PC6
+const uint8_t ALT_RX_PIN    = 13;  // PC7
 const uint8_t BAT_PIN       = A0;  // PF7/ADC7
-const uint8_t BAT_CNT_PIN   = A1;  // PF6/ADC6
+const uint8_t BAT_ON_PIN    = A1;  // PF6/ADC6
 const uint8_t DSUP_PIN      = A2;  // PF5/ADC5
 const uint8_t ASUP_PIN      = A3;  // PF4/ADC4
 const uint8_t VEXT_PIN      = A4;  // PF1/ADC1
 const uint8_t USB_PIN       = A5;  // PF0/ADC0
 
-const uint8_t _3v = 1;
-const uint8_t _5v = 2;
-const uint8_t _10v = 3;
-const uint8_t _tc_t = 4;
-
-const uint8_t _mag_open = 1;
-const uint8_t _mag_close = 2;
-const uint8_t _mag_open_close = 3;
-const uint8_t _button = 4;
-
-
-
-
-float analogVolt, batteryVolt;
-const uint16_t voutOnTime = 1;
-const uint8_t anSampNum = 3, anSampDly = 1, digInDebounce = 10;
-bool isAnAlarm, isAnAlarmFlag, isBatLow, isBatLowFlag, isExtInt, isPowerUp = true;
-const unsigned long wdtMs30000 = 30000;
-const unsigned long wdtMs100 = 100; 
+const uint8_t an3v = 1, an5v = 2, an10v = 3, pt100 = 4, ntc = 5, thermocouple_t = 6;
+const uint8_t mag_open = 1, mag_close = 2, mag_open_close = 3, button = 4;
+const uint8_t digDebounce = 10;
+float analogVolt;
+const uint8_t batOnDly = 1, batSampDly = 1, batSampNum = 3;
+uint16_t minuteRead, minuteSend;
+volatile bool isExtInt;
+bool isAnAlarm, isAnAlarmPrev, isBat, isBatStatePrev, isPowerUp;
+const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
 
 struct Conf {
-  uint16_t period;
+  uint16_t read_period;
+  uint16_t send_period;
   float bat_lo_v;
   uint8_t an;
   uint8_t dig;
@@ -103,11 +90,11 @@ void readAll() {
     readAnalog();
     if (conf.sensor == _ntc) {
       calcNtc();
-    } else if (conf.sensor == _3v) {
+    } else if (conf.sensor == an3v) {
       calc3v();
-    } else if (conf.sensor == _5v) {
+    } else if (conf.sensor == an5v) {
       calc5v();
-    } else if (conf.sensor == _10v) {
+    } else if (conf.sensor == an10v) {
       calc10v();
     }
     if (conf.an_alr_en) {
@@ -216,11 +203,11 @@ void uplink() {
   if (conf.interface == _an) {  
     if (conf.sensor == _ntc) {      
       lpp.addTemperature(1, analogVolt);
-    } else if (conf.sensor == _3v || conf.sensor == _5v || conf.sensor == _10v ) {
+    } else if (conf.sensor == an3v || conf.sensor == an5v || conf.sensor == an10v ) {
       lpp.addAnalogInput(1, analogVolt);
     }
   } else if (conf.interface == _dig) {
-    delay(digInDebounce);
+    delay(digDebounce);
     lpp.addDigitalInput(1, digitalRead(DIN_PIN));
   }    
   if (isPowerUp) {

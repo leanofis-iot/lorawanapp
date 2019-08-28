@@ -8,13 +8,6 @@
 #include <CayenneLPP.h>
 //#include <stdlib.h>
 
-const uint8_t batOnDly = 1, batSampDly = 1, batSampNum = 3;
-uint16_t minuteRead, minuteSend;
-volatile bool isExtInt;
-bool isBat, isBatStatePrev, isPowerUp;
-const unsigned long wdtMs30000 = 30000;
-const unsigned long wdtMs100 = 100; 
-
 const uint8_t CCS_ALR_PIN   = 0;   // PD2/RXD1/INT2
 const uint8_t SHT_ALR_PIN   = 1;   // PD3/TXD1/INT3
 const uint8_t RAK_RES_PIN   = 4;   // PD4/ADC8
@@ -30,6 +23,12 @@ const uint8_t CCS_SUP_PIN   = A2;  // PF5/ADC5
 const uint8_t SHT_SUP_PIN   = A3;  // PF4/ADC4
 const uint8_t VEXT_PIN      = A4;  // PF1/ADC1
 const uint8_t USB_PIN       = A5;  // PF0/ADC0
+
+const uint8_t batOnDly = 1, batSampDly = 1, batSampNum = 3;
+uint16_t minuteRead, minuteSend;
+volatile bool isExtInt;
+bool isBat, isBatStatePrev, isPowerUp;
+const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
 
 struct Conf {
   uint16_t read_period;
@@ -64,20 +63,18 @@ void setup() {
     setUsb();
   } 
   setSht();  
-  wdt_enable(WDTO_8S);
-  wdt_reset();
   readAll();
   atRakClrSerial();
-  atRakJoinOtaa();    
-  uplink(sht.periodicFetchData()); 
+  atRakJoinOtaa();  
+  uplink(); 
 }
 void loop() {   
-  for (uint16_t ii = 0; ii < 7.5; ii++) {     
+  for (uint16_t ii = 0; ii < 8 ; ii++) {   
     sleepAndWake();
     if (isExtInt) {
       isExtInt = false;
       readAll();   
-      uplink(sht.periodicFetchData());      
+      uplink();      
     }            
   }    
   minuteRead++;
@@ -86,25 +83,45 @@ void loop() {
     minuteRead = 0;    
     readAll();
     if (isBat) {
-      uplink(sht.periodicFetchData());      
+      uplink();      
     }    
   }    
   if (minuteSend >= conf.send_period) {
-    uplink(sht.periodicFetchData());
+    uplink();
   }    
+}
+void sleepAndWake() {
+  attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUpSht, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(CCS_ALR_PIN), wakeUpCcs, CHANGE);
+  LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF
+  //isExtInt = INTF2 || INTF3;  
+  detachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN));
+  detachInterrupt(digitalPinToInterrupt(CCS_ALR_PIN));  
+}
+void uplink() {
+  minuteRead = 0;
+  minuteSend = 0;  
+  SHT31D result = sht.periodicFetchData();
+  lpp.reset();
+  lpp.addDigitalInput(0, isBatStatePrev); 
+  if (conf.temp_en) {
+    lpp.addTemperature(1, result.t);
+  }
+  if (conf.hum_en) {
+    lpp.addRelativeHumidity(2, result.rh);
+  }    
+  if (!isPowerUp) {
+    isPowerUp = true;
+    lpp.addAnalogOutput(30, 0);    
+  }
+  atRakWake();
+  atRakSend(lpp.getBuffer());  
+  atRakSleep();  
 }
 void readAll() {
   wdt_enable(WDTO_8S);
   wdt_reset();
   checkBat();  
-}
-void sleepAndWake() {
-  attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUpSht, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(CCS_ALR_PIN), wakeUpCcs, CHANGE);
-  LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
-  //isExtInt = INTF2 || INTF3;  
-  detachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN));
-  detachInterrupt(digitalPinToInterrupt(CCS_ALR_PIN));  
 }
 void checkBat() {
   power_adc_enable();
@@ -137,25 +154,6 @@ void checkBat() {
     isBat = false;
   }
   isBatStatePrev = isBatState;
-}
-void uplink(SHT31D result) {
-  minuteRead = 0;
-  minuteSend = 0;
-  lpp.reset();
-  lpp.addDigitalInput(0, isBatStatePrev); 
-  if (conf.temp_en) {
-    lpp.addTemperature(1, result.t);
-  }
-  if (conf.hum_en) {
-    lpp.addRelativeHumidity(2, result.rh);
-  }    
-  if (!isPowerUp) {
-    isPowerUp = true;
-    lpp.addAnalogOutput(30, 0);    
-  }
-  atRakWake();
-  atRakSend(lpp.getBuffer());  
-  atRakSleep();  
 }
 void setPins() {
   pinMode(CCS_ALR_PIN, INPUT);
