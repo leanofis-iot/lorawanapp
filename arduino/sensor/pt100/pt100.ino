@@ -3,72 +3,64 @@
 #include "LowPower.h"
 #include <AltSoftSerial.h>
 #include <EEPROM.h>
-#include <Wire.h>
-#include "ClosedCube_SHT31D.h"
 #include <CayenneLPP.h>
 //#include <stdlib.h>
 
-const uint8_t CCS_ALR_PIN   = 0;   // PD2/RXD1/INT2
-const uint8_t SHT_ALR_PIN   = 1;   // PD3/TXD1/INT3
+const uint8_t ADS_CS_PIN    = 7;   // PE6/AIN0/INT6
+const uint8_t DIN_PIN       = 3;   // PD0/SCL/INT0
 const uint8_t RAK_RES_PIN   = 4;   // PD4/ADC8
 const uint8_t DOUT_PIN      = 6;   // PD7/ADC10
-const uint8_t CCS_WAKE_PIN  = 8;   // PB4/ADC11/PCINT4
-const uint8_t PER_RES_PIN   = 9;   // PB5/ADC12/PCINT5
 const uint8_t LED_PIN       = 10;  // PB6/ADC13/PCINT6
 const uint8_t ALT_TX_PIN    = 5;   // PC6
 const uint8_t ALT_RX_PIN    = 13;  // PC7
 const uint8_t BAT_PIN       = A0;  // PF7/ADC7
 const uint8_t BAT_ON_PIN    = A1;  // PF6/ADC6
-const uint8_t CCS_SUP_PIN   = A2;  // PF5/ADC5
-const uint8_t SHT_SUP_PIN   = A3;  // PF4/ADC4
+const uint8_t DSUP_PIN      = A2;  // PF5/ADC5
+const uint8_t ASUP_PIN      = A3;  // PF4/ADC4
 const uint8_t VEXT_PIN      = A4;  // PF1/ADC1
 const uint8_t USB_PIN       = A5;  // PF0/ADC0
 
+const uint8_t change = 1, rising = 2, falling = 3;
+const uint8_t digDebounce = 10;
+float temperature;
+bool isTempAlarm, isTempAlarmPrev, isBat, isBatStatePrev, isPowerUp;
+volatile bool isExtInt;
 const uint8_t supOnDly = 1, batSampDly = 1, batSampNum = 3;
 uint16_t minuteRead, minuteSend;
-volatile bool isExtInt;
-bool isBat, isBatStatePrev, isPowerUp;
 const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
 
 struct Conf {
   uint16_t read_period;
   uint16_t send_period;
-  float bat_lo_v;  
+  float bat_lo_v;
   float tmp_alr_hi_set;
   float tmp_alr_hi_clr;
   float tmp_alr_lo_set;
   float tmp_alr_lo_clr;
-  float hum_alr_hi_set;
-  float hum_alr_hi_clr;
-  float hum_alr_lo_set;
-  float hum_alr_lo_clr;
-  uint8_t temp_en;
-  uint8_t hum_en;  
+  uint8_t dig;  
 };
 
 Conf conf;
 AltSoftSerial rakSerial;
-ClosedCube_SHT31D sht;
 CayenneLPP lpp(51);
 
 void setup() {
   setPins();
   setPeripheral();
-  EEPROM.get(0, conf);    
+  EEPROM.get(0, conf);
   Serial.begin(115200);  
-  rakSerial.begin(9600);
-  flashLed3(); 
+  rakSerial.begin(9600); 
+  flashLed3();
   delay(5000);
   if (digitalRead(USB_PIN) == HIGH) {
     setUsb();
-  } 
-  setSht();  
+  }   
   readAll();
   atRakClrSerial();
-  atRakJoinOtaa();  
-  uplink(); 
+  atRakJoinOtaa();    
+  uplink();     
 }
-void loop() {   
+void loop() {  
   for (uint16_t ii = 0; ii < 8 ; ii++) {   
     sleepAndWake();
     if (isExtInt) {
@@ -82,7 +74,7 @@ void loop() {
   if (minuteRead >= conf.read_period) {
     minuteRead = 0;    
     readAll();
-    if (isBat) {
+    if (isTempAlarm || isBat) {
       uplink();      
     }    
   }    
@@ -91,26 +83,26 @@ void loop() {
   }    
 }
 void sleepAndWake() {
-  attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUpSht, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(CCS_ALR_PIN), wakeUpCcs, CHANGE);
+  if (conf.dig == 1) {
+    attachInterrupt(digitalPinToInterrupt(DIN_PIN), wakeUp, CHANGE);
+  } else if (conf.dig == 2) {
+    attachInterrupt(digitalPinToInterrupt(DIN_PIN), wakeUp, RISING);
+  } else if (conf.dig == 3) {
+    attachInterrupt(digitalPinToInterrupt(DIN_PIN), wakeUp, FALLING);
+  }  
   LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF
   //isExtInt = INTF2 || INTF3;  
-  detachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN));
-  detachInterrupt(digitalPinToInterrupt(CCS_ALR_PIN));  
+  detachInterrupt(digitalPinToInterrupt(DIN_PIN));   
 }
-void uplink() {
+void uplink() {  
   minuteRead = 0;
   minuteSend = 0;  
-  SHT31D result = sht.periodicFetchData();
   lpp.reset();
   lpp.addDigitalInput(0, isBatStatePrev); 
-  if (conf.temp_en) {
-    lpp.addTemperature(1, result.t);
-  }
-  if (conf.hum_en) {
-    lpp.addRelativeHumidity(2, result.rh);
-  } 
-  lpp.addDigitalOutput(20, digitalRead(DOUT_PIN));   
+  lpp.addTemperature(1, temperature);
+  delay(digDebounce);
+  lpp.addDigitalInput(10, digitalRead(DIN_PIN));
+  lpp.addDigitalOutput(20, digitalRead(DOUT_PIN));  
   if (!isPowerUp) {
     isPowerUp = true;
     lpp.addAnalogOutput(30, 0);    
@@ -122,7 +114,29 @@ void uplink() {
 void readAll() {
   wdt_enable(WDTO_8S);
   wdt_reset();
-  checkBat();  
+  checkBat();
+  readAds();
+  calcPt100();
+  checkTempAlarm();
+}
+void readAds() {
+  
+}
+void calcPt100() {
+  
+}
+void checkTempAlarm() {  
+  const bool isAnAlarmLog = isAnAlarmFlag; 
+  if (analogVolt >= conf.an_alr_hi_set || analogVolt <= conf.an_alr_lo_set) {
+    isAnAlarmFlag = true;    
+  } else if (analogVolt <= conf.an_alr_hi_clr || analogVolt >= conf.an_alr_lo_clr) {
+    isAnAlarmFlag = false;
+  }
+  if (isAnAlarmFlag != isAnAlarmLog) {
+    isAnAlarm = true;  
+  } else {
+    isAnAlarm = false;
+  }
 }
 void checkBat() {
   power_adc_enable();
@@ -157,42 +171,29 @@ void checkBat() {
   isBatStatePrev = isBatState;
 }
 void setPins() {
-  pinMode(CCS_ALR_PIN, INPUT);
-  pinMode(SHT_ALR_PIN, INPUT);
+  pinMode(ADS_CS_PIN, OUTPUT);
+  pinMode(DIN_PIN, INPUT);
   pinMode(RAK_RES_PIN, OUTPUT);
   pinMode(DOUT_PIN, OUTPUT);
-  pinMode(CCS_WAKE_PIN, OUTPUT);
-  pinMode(PER_RES_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
   pinMode(BAT_PIN, INPUT);
   pinMode(BAT_ON_PIN, OUTPUT);
-  pinMode(CCS_SUP_PIN, OUTPUT);
-  pinMode(SHT_SUP_PIN, OUTPUT);
+  pinMode(DSUP_PIN, OUTPUT);
+  pinMode(ASUP_PIN, OUTPUT);
   pinMode(VEXT_PIN, INPUT);
   pinMode(USB_PIN, INPUT);  
+  digitalWrite(ADS_CS_PIN, HIGH);
   digitalWrite(RAK_RES_PIN, HIGH);
   digitalWrite(DOUT_PIN, LOW);
-  digitalWrite(CCS_WAKE_PIN, HIGH);
-  digitalWrite(PER_RES_PIN, HIGH);
   digitalWrite(LED_PIN, HIGH);
   digitalWrite(BAT_ON_PIN, HIGH);
-  digitalWrite(CCS_SUP_PIN, LOW);
-  digitalWrite(SHT_SUP_PIN, LOW);  
+  digitalWrite(DSUP_PIN, HIGH);
+  digitalWrite(ASUP_PIN, HIGH);
 }
 void setPeripheral() {
   digitalWrite(RAK_RES_PIN, LOW);
-  digitalWrite(PER_RES_PIN, LOW); 
   delay(10);
   digitalWrite(RAK_RES_PIN, HIGH);
-  digitalWrite(PER_RES_PIN, HIGH); 
-}
-void setSht() {
-  Wire.begin();
-  sht.begin(0x44);
-  sht.clearAll();
-  sht.periodicStart(SHT3XD_REPEATABILITY_LOW, SHT3XD_FREQUENCY_1HZ);
-  sht.writeAlertHigh(conf.tmp_alr_hi_set, conf.tmp_alr_hi_clr, conf.hum_alr_hi_set, conf.hum_alr_hi_clr);
-  sht.writeAlertLow(conf.tmp_alr_lo_clr, conf.tmp_alr_lo_set, conf.hum_alr_lo_clr, conf.hum_alr_lo_set); 
 }
 void setUsb() {
   String str;
@@ -274,66 +275,16 @@ void setUsb() {
             Serial.print(F("OK"));
             Serial.println(conf.tmp_alr_lo_clr);
           }         
-        } else if (str.startsWith(F("hum_alr_hi_set"))) {
+        } else if (str.startsWith(F("dig"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("hum_alr_hi_set="), "");
-            conf.hum_alr_hi_set = str.toFloat();
+            str.replace(F("dig="), "");
+            conf.dig = str.toInt();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.hum_alr_hi_set);
-          } 
-        } else if (str.startsWith(F("hum_alr_hi_clr"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("hum_alr_hi_clr="), "");
-            conf.hum_alr_hi_clr = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.hum_alr_hi_clr);
-          }  
-        } else if (str.startsWith(F("hum_alr_lo_set"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("hum_alr_lo_set="), "");
-            conf.hum_alr_lo_set = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.hum_alr_lo_set);
-          }   
-        } else if (str.startsWith(F("hum_alr_lo_clr"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("hum_alr_lo_clr="), "");
-            conf.hum_alr_lo_clr = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.hum_alr_lo_clr);
-          }  
-        } else if (str.startsWith(F("temp_en"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("temp_en="), "");
-            conf.temp_en = str.toInt();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.temp_en);
-          }  
-        } else if (str.startsWith(F("hum_en"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("hum_en="), "");
-            conf.hum_en = str.toInt();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.hum_en);
-          }                    
+            Serial.println(conf.dig);
+          }                      
         }
         str = "";        
       }      
@@ -415,24 +366,9 @@ void lppDownlinkDec(String str) {
       EEPROM.put(0, conf);
     } else if (confKey == 7) {
       conf.tmp_alr_lo_clr = confValue;
-      EEPROM.put(0, conf);
+      EEPROM.put(0, conf);    
     } else if (confKey == 8) {
-      conf.hum_alr_hi_set = confValue;
-      EEPROM.put(0, conf);
-    } else if (confKey == 9) {
-      conf.hum_alr_hi_clr = confValue;
-      EEPROM.put(0, conf);  
-    } else if (confKey == 10) {
-      conf.hum_alr_lo_set = confValue;
-      EEPROM.put(0, conf);
-    } else if (confKey == 11) {
-      conf.hum_alr_lo_clr = confValue;
-      EEPROM.put(0, conf); 
-    } else if (confKey == 12) {
-      conf.temp_en = confValue;
-      EEPROM.put(0, conf);
-    } else if (confKey == 13) {
-      conf.hum_en = confValue;
+      conf.dig = confValue;
       EEPROM.put(0, conf);   
     } else if (confKey == 99) {
       resetMe();  
@@ -478,10 +414,7 @@ void resetMe() {
   wdt_enable(WDTO_15MS);
   while(true); 
 }
-void wakeUpSht() {
-  isExtInt = true;   
-}
-void wakeUpCcs() { 
+void wakeUp() {
   isExtInt = true;   
 }
 void flashLed() {
