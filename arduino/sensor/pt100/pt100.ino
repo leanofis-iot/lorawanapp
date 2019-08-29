@@ -4,6 +4,8 @@
 #include <AltSoftSerial.h>
 #include <EEPROM.h>
 #include <CayenneLPP.h>
+#include "ADS1118.h"
+#include <SPI.h>
 //#include <stdlib.h>
 
 const uint8_t ADS_CS_PIN    = 7;   // PE6/AIN0/INT6
@@ -22,7 +24,8 @@ const uint8_t USB_PIN       = A5;  // PF0/ADC0
 
 const uint8_t change = 1, rising = 2, falling = 3;
 const uint8_t digDebounce = 10;
-float temperature;
+float anVolt, temperature;
+const float extRef = 2048, ptCo = 0.3851, ptR0 = 100, ptRext = 2000;
 bool isTempAlarm, isTempAlarmPrev, isBat, isBatStatePrev, isPowerUp;
 volatile bool isExtInt;
 const uint8_t supOnDly = 1, batSampDly = 1, batSampNum = 3;
@@ -41,6 +44,7 @@ struct Conf {
 };
 
 Conf conf;
+ADS1118 ads1118(ADS_CS_PIN);
 AltSoftSerial rakSerial;
 CayenneLPP lpp(51);
 
@@ -54,7 +58,8 @@ void setup() {
   delay(5000);
   if (digitalRead(USB_PIN) == HIGH) {
     setUsb();
-  }   
+  }
+  setAds();   
   readAll();
   atRakClrSerial();
   atRakJoinOtaa();    
@@ -116,15 +121,20 @@ void readAll() {
   wdt_reset();
   checkBat();
   readAds();
-  calcPt100();
-  checkTempAlarm();
+  calcTemperature();
+  //checkTempAlarm();  
 }
 void readAds() {
-  
+  digitalWrite(ASUP_PIN, LOW);
+  delay(supOnDly);
+  anVolt = ads1118.getMilliVolts();
+  digitalWrite(ASUP_PIN, HIGH);  
 }
-void calcPt100() {
-  
+void calcTemperature() {
+  const float ptR = ( anVolt * ptRext ) / ( extRef - anVolt );
+  temperature = ( ptR - ptR0 ) / ptCo;  
 }
+/*
 void checkTempAlarm() {  
   const bool isAnAlarmLog = isAnAlarmFlag; 
   if (analogVolt >= conf.an_alr_hi_set || analogVolt <= conf.an_alr_lo_set) {
@@ -137,7 +147,9 @@ void checkTempAlarm() {
   } else {
     isAnAlarm = false;
   }
-}
+} 
+ */
+
 void checkBat() {
   power_adc_enable();
   analogReference(INTERNAL);
@@ -194,6 +206,11 @@ void setPeripheral() {
   digitalWrite(RAK_RES_PIN, LOW);
   delay(10);
   digitalWrite(RAK_RES_PIN, HIGH);
+}
+void setAds() {
+  ads1118.begin();
+  //ads1118.setSampligRate(ads1118.RATE_64SPS);
+  ads1118.disablePullup(); 
 }
 void setUsb() {
   String str;
