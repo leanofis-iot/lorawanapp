@@ -27,7 +27,7 @@ const uint8_t USB_PIN       = A5;  // PF0/ADC0
 const uint8_t supOnDly = 1, batSampDly = 1, batSampNum = 3;
 uint16_t minuteRead, minuteSend;
 volatile bool isExtInt;
-bool isBat, isBatStatePrev, isPowerUp;
+bool isBatAlarm, isBatLowPrev, isPowerUp;
 const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
 
 struct Conf {
@@ -82,7 +82,7 @@ void loop() {
   if (minuteRead >= conf.read_period) {
     minuteRead = 0;    
     readAll();
-    if (isBat) {
+    if (isBatAlarm) {
       uplink();      
     }    
   }    
@@ -103,7 +103,7 @@ void uplink() {
   minuteSend = 0;  
   SHT31D result = sht.periodicFetchData();
   lpp.reset();
-  lpp.addDigitalInput(0, isBatStatePrev); 
+  lpp.addDigitalInput(0, isBatLowPrev); 
   if (conf.temp_en) {
     lpp.addTemperature(1, result.t);
   }
@@ -143,18 +143,18 @@ void checkBat() {
   }
   batteryVolt /= batSampNum;   
   batteryVolt = ( batteryVolt / 1023 ) * 3.6;
-  bool isBatState; 
+  bool isBatLow; 
   if (batteryVolt <= conf.bat_lo_v) {
-    isBatState = true;   
+    isBatLow = true;   
   } else {
-    isBatState = false;
+    isBatLow = false;
   }
-  if (isBatState != isBatStatePrev) {
-    isBat = true;  
+  if (isBatLow != isBatLowPrev) {
+    isBatAlarm = true;  
   } else {
-    isBat = false;
+    isBatAlarm = false;
   }
-  isBatStatePrev = isBatState;
+  isBatLowPrev = isBatLow;
 }
 void setPins() {
   pinMode(CCS_ALR_PIN, INPUT);

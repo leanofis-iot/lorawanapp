@@ -36,9 +36,10 @@ struct Conf {
   uint16_t read_period;
   uint16_t send_period;
   float bat_lo_v;
-  float pt_coeff = 0.3851;
-  float pt_r0 = 100;
-  float r_ext = 2000;
+  float ntc_t0 = 25;
+  float ntc_r0 = 10000;
+  float ntc_coeff = 3950;
+  float r_ext = 10000;      
   float tmp_alr_hi_set;
   float tmp_alr_hi_clr;
   float tmp_alr_lo_set;
@@ -138,7 +139,12 @@ void calcR() {
   R = ( mV * conf.r_ext ) / ( extRef - mV );
 }
 void calcT() {  
-  T = ( R - conf.pt_r0 ) / conf.pt_coeff;  
+  T = R / conf.ntc_r0;     
+  T = log(T);              
+  T /= conf.ntc_coeff;     
+  T += 1.0 / (conf.ntc_t0 + 273.15);
+  T = 1.0 / T;                 
+  T -= 273.15;       
 }
 void checkTempAlarm() {  
   bool isTempExt; 
@@ -255,26 +261,36 @@ void setUsb() {
           } else {
             Serial.print(F("OK"));
             Serial.println(conf.bat_lo_v);
-          }
-        } else if (str.startsWith(F("pt_coeff"))) {
+          } 
+        } else if (str.startsWith(F("ntc_t0"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("pt_coeff="), "");
-            conf.pt_coeff = str.toFloat();
+            str.replace(F("ntc_t0="), "");
+            conf.ntc_t0 = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.pt_coeff);
+            Serial.println(conf.ntc_t0);
           }  
-        } else if (str.startsWith(F("pt_r0"))) {
+        } else if (str.startsWith(F("ntc_r0"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("pt_r0="), "");
-            conf.pt_r0 = str.toFloat();
+            str.replace(F("ntc_r0="), "");
+            conf.ntc_r0 = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.pt_r0);
+            Serial.println(conf.ntc_r0);
+          } 
+        } else if (str.startsWith(F("ntc_coeff"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("ntc_coeff="), "");
+            conf.ntc_coeff = str.toFloat();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.ntc_coeff);
           }  
         } else if (str.startsWith(F("r_ext"))) {
           if (str.indexOf(F("=")) >= 0) {
@@ -285,7 +301,7 @@ void setUsb() {
           } else {
             Serial.print(F("OK"));
             Serial.println(conf.r_ext);
-          }          
+          }           
         } else if (str.startsWith(F("tmp_alr_hi_set"))) {
           if (str.indexOf(F("=")) >= 0) {
             str.replace(F("tmp_alr_hi_set="), "");
