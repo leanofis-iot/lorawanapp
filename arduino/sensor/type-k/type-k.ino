@@ -31,19 +31,20 @@ volatile bool isExtInt;
 const uint8_t supOnDly = 1, batSampDly = 1, batSampNum = 3;
 uint16_t minuteRead, minuteSend;
 const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
+const float rangeMv1 = 0, rangeMv2 = 20.644;
+const float co1[] PROGMEM = {0.0000000E+0, 2.5173462E+1, -1.1662878E+0, -1.0833638E+0, -8.9773540E-1, -3.7342377E-1, -8.6632643E-2, -1.0450598E-2, -5.1920577E-4}; 
+const float co2[] PROGMEM = {0.0000000E+0, 2.5083550E+1, 7.8601060E-2, -2.5031310E-1, 8.3152700E-2, -1.2280340E-2, 9.8040360E-4, -4.4130300E-5, 1.0577340E-6, -1.0527550E-8};
+const float co3[] PROGMEM = {-1.3180580E+2, 4.8302220E+1, -1.6460310E+0, 5.4647310E-2, -9.6507150E-4, 8.8021930E-6, -3.1108100E-8};  
 
 struct Conf {
   uint16_t read_period;
   uint16_t send_period;
-  float bat_lo_v;  
+  float bat_lo_v;
   float tmp_alr_hi_set;
   float tmp_alr_hi_clr;
   float tmp_alr_lo_set;
   float tmp_alr_lo_clr;
-  uint8_t dig;
-  float r_ext = 2000;
-  float pt_r0 = 100;  
-  float pt_coeff = 0.3851;  
+  uint8_t dig;  
 };
 
 Conf conf;
@@ -124,7 +125,6 @@ void readAll() {
   wdt_reset();
   checkBat();
   readMv();
-  calcR();
   calcT();
   checkTempAlarm();  
 }
@@ -134,11 +134,19 @@ void readMv() {
   mV = ads1118.getMilliVolts();
   digitalWrite(ASUP_PIN, HIGH);  
 }
-void calcR() {
-  R = ( mV * conf.r_ext ) / ( extRef - mV );
-}
 void calcT() {  
-  T = ( R - conf.pt_r0 ) / conf.pt_coeff;  
+  if (mV < rangeMv1) {
+    T = pgm_read_float(&co1[0]) + mV*(pgm_read_float(&co1[1]) + mV*(pgm_read_float(&co1[2]) + mV*(pgm_read_float(&co1[3])
+      + mV*(pgm_read_float(&co1[4]) + mV*(pgm_read_float(&co1[5]) + mV*(pgm_read_float(&co1[6]) + mV*(pgm_read_float(&co1[7])
+      + mV*(pgm_read_float(&co1[8])))))))));      
+  } else if (mV > rangeMv2) {
+    T = pgm_read_float(&co3[0]) + mV*(pgm_read_float(&co3[1]) + mV*(pgm_read_float(&co3[2]) + mV*(pgm_read_float(&co3[3])
+      + mV*(pgm_read_float(&co3[4]) + mV*(pgm_read_float(&co3[5]) + mV*(pgm_read_float(&co3[6])))))));
+  } else {
+    T = pgm_read_float(&co2[0]) + mV*(pgm_read_float(&co2[1]) + mV*(pgm_read_float(&co2[2]) + mV*(pgm_read_float(&co2[3])
+      + mV*(pgm_read_float(&co2[4]) + mV*(pgm_read_float(&co2[5]) + mV*(pgm_read_float(&co2[6]) + mV*(pgm_read_float(&co2[7])
+      + mV*(pgm_read_float(&co2[8]) + mV*(pgm_read_float(&co2[9]))))))))));
+  }
 }
 void checkTempAlarm() {  
   bool isTempExt; 
@@ -255,7 +263,7 @@ void setUsb() {
           } else {
             Serial.print(F("OK"));
             Serial.println(conf.bat_lo_v);
-          }        
+          }            
         } else if (str.startsWith(F("tmp_alr_hi_set"))) {
           if (str.indexOf(F("=")) >= 0) {
             str.replace(F("tmp_alr_hi_set="), "");
@@ -305,37 +313,7 @@ void setUsb() {
           } else {
             Serial.print(F("OK"));
             Serial.println(conf.dig);
-          } 
-        } else if (str.startsWith(F("r_ext"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("r_ext="), "");
-            conf.r_ext = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.r_ext);
-          }        
-        } else if (str.startsWith(F("pt_coeff"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("pt_coeff="), "");
-            conf.pt_coeff = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.pt_coeff);
-          }  
-        } else if (str.startsWith(F("pt_r0"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("pt_r0="), "");
-            conf.pt_r0 = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.pt_r0);
-          }                                
+          }                      
         }
         str = "";        
       }      
@@ -405,7 +383,7 @@ void lppDownlinkDec(String str) {
       EEPROM.put(0, conf);  
     } else if (confKey == 3) {
       conf.bat_lo_v = confValue;
-      EEPROM.put(0, conf);    
+      EEPROM.put(0, conf);
     } else if (confKey == 4) {
       conf.tmp_alr_hi_set = confValue;
       EEPROM.put(0, conf);
@@ -420,16 +398,7 @@ void lppDownlinkDec(String str) {
       EEPROM.put(0, conf);    
     } else if (confKey == 8) {
       conf.dig = confValue;
-      EEPROM.put(0, conf); 
-    } else if (confKey == 9) {
-      conf.r_ext = confValue;
-      EEPROM.put(0, conf);
-    } else if (confKey == 10) {
-      conf.pt_coeff = confValue;
-      EEPROM.put(0, conf);
-    } else if (confKey == 11) {
-      conf.pt_r0 = confValue;
-      EEPROM.put(0, conf);  
+      EEPROM.put(0, conf);   
     } else if (confKey == 99) {
       resetMe();  
     }     
