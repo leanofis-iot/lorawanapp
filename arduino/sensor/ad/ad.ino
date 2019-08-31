@@ -24,7 +24,7 @@ const uint8_t USB_PIN       = A5;  // PF0/ADC0
 
 const uint8_t change = 1, rising = 2, falling = 3;
 const uint8_t digDebounce = 10;
-float mV, T;
+float mV, R, T;
 const float extRef = 2048;
 bool isTempAlarm, isTempExtPrev, isBatAlarm, isBatLowPrev, isPowerUp;
 volatile bool isExtInt;
@@ -35,16 +35,24 @@ const float rangeMv1 = 0, rangeMv2 = 20.644;
 const float k1[] PROGMEM = {0.0000000E+0, 2.5173462E+1, -1.1662878E+0, -1.0833638E+0, -8.9773540E-1, -3.7342377E-1, -8.6632643E-2, -1.0450598E-2, -5.1920577E-4}; 
 const float k2[] PROGMEM = {0.0000000E+0, 2.5083550E+1, 7.8601060E-2, -2.5031310E-1, 8.3152700E-2, -1.2280340E-2, 9.8040360E-4, -4.4130300E-5, 1.0577340E-6, -1.0527550E-8};
 const float k3[] PROGMEM = {-1.3180580E+2, 4.8302220E+1, -1.6460310E+0, 5.4647310E-2, -9.6507150E-4, 8.8021930E-6, -3.1108100E-8};  
+const uint8_t type_k = 1, rtd = 2, ntc = 3;
 
 struct Conf {
   uint16_t read_period;
   uint16_t send_period;
   float bat_lo_v;
+  uint8_t an;
+  uint8_t dig;
+  float r_ext;
   float tmp_alr_hi_set;
   float tmp_alr_hi_clr;
   float tmp_alr_lo_set;
   float tmp_alr_lo_clr;
-  uint8_t dig;  
+  float rtd_r0 = 100;  
+  float rtd_coeff = 0.3851;  
+  float ntc_coeff;  
+  float ntc_r0;
+  float ntc_t0;  
 };
 
 Conf conf;
@@ -125,6 +133,7 @@ void readAll() {
   wdt_reset();
   checkBat();
   readMv();
+  calcR();
   calcT();
   checkTempAlarm();  
 }
@@ -134,20 +143,36 @@ void readMv() {
   mV = ads1118.getMilliVolts();
   digitalWrite(ASUP_PIN, HIGH);  
 }
-void calcT() {  
-  if (mV < rangeMv1) {
-    T = pgm_read_float(&k1[0]) + mV*(pgm_read_float(&k1[1]) + mV*(pgm_read_float(&k1[2]) + mV*(pgm_read_float(&k1[3])
-      + mV*(pgm_read_float(&k1[4]) + mV*(pgm_read_float(&k1[5]) + mV*(pgm_read_float(&k1[6]) + mV*(pgm_read_float(&k1[7])
-      + mV*(pgm_read_float(&k1[8])))))))));      
-  } else if (mV > rangeMv2) {
-    T = pgm_read_float(&k3[0]) + mV*(pgm_read_float(&k3[1]) + mV*(pgm_read_float(&k3[2]) + mV*(pgm_read_float(&k3[3])
-      + mV*(pgm_read_float(&k3[4]) + mV*(pgm_read_float(&k3[5]) + mV*(pgm_read_float(&k3[6])))))));
-  } else {
-    T = pgm_read_float(&k2[0]) + mV*(pgm_read_float(&k2[1]) + mV*(pgm_read_float(&k2[2]) + mV*(pgm_read_float(&k2[3])
-      + mV*(pgm_read_float(&k2[4]) + mV*(pgm_read_float(&k2[5]) + mV*(pgm_read_float(&k2[6]) + mV*(pgm_read_float(&k2[7])
-      + mV*(pgm_read_float(&k2[8]) + mV*(pgm_read_float(&k2[9]))))))))));
-  }
-  T = T + ads1118.getTemperature();
+void calcR() {
+  R = ( mV * conf.r_ext ) / ( extRef - mV );
+}
+void calcT() { 
+  if (conf.an) {
+    if (conf.an == type_k) {
+      if (mV < rangeMv1) {
+        T = pgm_read_float(&k1[0]) + mV*(pgm_read_float(&k1[1]) + mV*(pgm_read_float(&k1[2]) + mV*(pgm_read_float(&k1[3])
+          + mV*(pgm_read_float(&k1[4]) + mV*(pgm_read_float(&k1[5]) + mV*(pgm_read_float(&k1[6]) + mV*(pgm_read_float(&k1[7])
+          + mV*(pgm_read_float(&k1[8])))))))));      
+      } else if (mV > rangeMv2) {
+        T = pgm_read_float(&k3[0]) + mV*(pgm_read_float(&k3[1]) + mV*(pgm_read_float(&k3[2]) + mV*(pgm_read_float(&k3[3])
+          + mV*(pgm_read_float(&k3[4]) + mV*(pgm_read_float(&k3[5]) + mV*(pgm_read_float(&k3[6])))))));
+      } else {
+        T = pgm_read_float(&k2[0]) + mV*(pgm_read_float(&k2[1]) + mV*(pgm_read_float(&k2[2]) + mV*(pgm_read_float(&k2[3])
+          + mV*(pgm_read_float(&k2[4]) + mV*(pgm_read_float(&k2[5]) + mV*(pgm_read_float(&k2[6]) + mV*(pgm_read_float(&k2[7])
+          + mV*(pgm_read_float(&k2[8]) + mV*(pgm_read_float(&k2[9]))))))))));
+      } 
+      T = T + ads1118.getTemperature();
+    } else if (conf.an == rtd) {
+      T = ( R - conf.rtd_r0 ) / conf.rtd_coeff;      
+    } else if (conf.an == ntc) {
+      T = R / conf.ntc_r0;     
+      T = log(T);              
+      T /= conf.ntc_coeff;     
+      T += 1.0 / (conf.ntc_t0 + 273.15);
+      T = 1.0 / T;                 
+      T -= 273.15;       
+    }
+  }  
 }
 void checkTempAlarm() {  
   bool isTempExt; 
@@ -264,7 +289,37 @@ void setUsb() {
           } else {
             Serial.print(F("OK"));
             Serial.println(conf.bat_lo_v);
-          }            
+          }
+        } else if (str.startsWith(F("an"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("an="), "");
+            conf.an = str.toInt();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.an);
+          }   
+        } else if (str.startsWith(F("dig"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("dig="), "");
+            conf.dig = str.toInt();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.dig);
+          } 
+        } else if (str.startsWith(F("r_ext"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("r_ext="), "");
+            conf.r_ext = str.toFloat();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.r_ext);
+          }                   
         } else if (str.startsWith(F("tmp_alr_hi_set"))) {
           if (str.indexOf(F("=")) >= 0) {
             str.replace(F("tmp_alr_hi_set="), "");
@@ -304,17 +359,57 @@ void setUsb() {
           } else {
             Serial.print(F("OK"));
             Serial.println(conf.tmp_alr_lo_clr);
-          }         
-        } else if (str.startsWith(F("dig"))) {
+          }
+        } else if (str.startsWith(F("rtd_r0"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("dig="), "");
-            conf.dig = str.toInt();
+            str.replace(F("rtd_r0="), "");
+            conf.rtd_r0 = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.dig);
-          }                      
+            Serial.println(conf.rtd_r0);
+          }
+        } else if (str.startsWith(F("rtd_coeff"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("rtd_coeff="), "");
+            conf.rtd_coeff = str.toFloat();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.rtd_coeff);
+          }
+        } else if (str.startsWith(F("ntc_coeff"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("ntc_coeff="), "");
+            conf.ntc_coeff = str.toFloat();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.ntc_coeff);
+          }
+        } else if (str.startsWith(F("ntc_r0"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("ntc_r0="), "");
+            conf.ntc_r0 = str.toFloat();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.ntc_r0);
+          }
+        } else if (str.startsWith(F("ntc_t0"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("ntc_t0="), "");
+            conf.ntc_t0 = str.toFloat();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.ntc_t0);
+          }
         }
         str = "";        
       }      
@@ -386,20 +481,41 @@ void lppDownlinkDec(String str) {
       conf.bat_lo_v = confValue;
       EEPROM.put(0, conf);
     } else if (confKey == 4) {
-      conf.tmp_alr_hi_set = confValue;
+      conf.an = confValue;
       EEPROM.put(0, conf);
     } else if (confKey == 5) {
-      conf.tmp_alr_hi_clr = confValue;
+      conf.dig = confValue;
       EEPROM.put(0, conf);
     } else if (confKey == 6) {
-      conf.tmp_alr_lo_set = confValue;
+      conf.r_ext = confValue;
       EEPROM.put(0, conf);
     } else if (confKey == 7) {
+      conf.tmp_alr_hi_set = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 8) {
+      conf.tmp_alr_hi_clr = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 9) {
+      conf.tmp_alr_lo_set = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 10) {
       conf.tmp_alr_lo_clr = confValue;
       EEPROM.put(0, conf);    
-    } else if (confKey == 8) {
-      conf.dig = confValue;
-      EEPROM.put(0, conf);   
+    } else if (confKey == 11) {
+      conf.rtd_r0 = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 12) {
+      conf.rtd_coeff = confValue;
+      EEPROM.put(0, conf);
+    } else if (confKey == 13) {
+      conf.ntc_coeff = confValue;
+      EEPROM.put(0, conf); 
+    } else if (confKey == 14) {
+      conf.ntc_r0 = confValue;
+      EEPROM.put(0, conf); 
+    } else if (confKey == 15) {
+      conf.ntc_t0 = confValue;
+      EEPROM.put(0, conf);    
     } else if (confKey == 99) {
       resetMe();  
     }     

@@ -42,8 +42,8 @@ struct Conf {
   float tmp_alr_lo_clr;
   uint8_t dig;
   float r_ext = 2000;
-  float pt_r0 = 100;  
-  float pt_coeff = 0.3851;  
+  float rtd_r0 = 100;  
+  float rtd_coeff = 0.3851;  
 };
 
 Conf conf;
@@ -138,7 +138,7 @@ void calcR() {
   R = ( mV * conf.r_ext ) / ( extRef - mV );
 }
 void calcT() {  
-  T = ( R - conf.pt_r0 ) / conf.pt_coeff;  
+  T = ( R - conf.rtd_r0 ) / conf.rtd_coeff;  
 }
 void checkTempAlarm() {  
   bool isTempExt; 
@@ -316,25 +316,25 @@ void setUsb() {
             Serial.print(F("OK"));
             Serial.println(conf.r_ext);
           }        
-        } else if (str.startsWith(F("pt_coeff"))) {
+        } else if (str.startsWith(F("rtd_coeff"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("pt_coeff="), "");
-            conf.pt_coeff = str.toFloat();
+            str.replace(F("rtd_coeff="), "");
+            conf.rtd_coeff = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.pt_coeff);
+            Serial.println(conf.rtd_coeff);
           }  
-        } else if (str.startsWith(F("pt_r0"))) {
+        } else if (str.startsWith(F("rtd_r0"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("pt_r0="), "");
-            conf.pt_r0 = str.toFloat();
+            str.replace(F("rtd_r0="), "");
+            conf.rtd_r0 = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.pt_r0);
+            Serial.println(conf.rtd_r0);
           }                                
         }
         str = "";        
@@ -425,10 +425,10 @@ void lppDownlinkDec(String str) {
       conf.r_ext = confValue;
       EEPROM.put(0, conf);
     } else if (confKey == 10) {
-      conf.pt_coeff = confValue;
+      conf.rtd_coeff = confValue;
       EEPROM.put(0, conf);
     } else if (confKey == 11) {
-      conf.pt_r0 = confValue;
+      conf.rtd_r0 = confValue;
       EEPROM.put(0, conf);  
     } else if (confKey == 99) {
       resetMe();  
