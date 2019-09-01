@@ -4,8 +4,8 @@ struct Conf {
   uint16_t read_period = 2;
   uint16_t send_period = 10;
   float bat_lo_v = 3.2;
-  uint8_t an = 2;
-  uint8_t dig = 1;
+  uint8_t an_in = 2;
+  uint8_t dig_in = 1;
   float r_ext = 2000;
   float tmp_alr_hi_set = 102;
   float tmp_alr_hi_clr = 98;

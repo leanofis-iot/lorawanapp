@@ -11,7 +11,7 @@
 const uint8_t CCS_ALR_PIN   = 0;   // PD2/RXD1/INT2
 const uint8_t SHT_ALR_PIN   = 1;   // PD3/TXD1/INT3
 const uint8_t RAK_RES_PIN   = 4;   // PD4/ADC8
-const uint8_t DOUT_PIN      = 6;   // PD7/ADC10
+const uint8_t ALARM_PIN      = 6;   // PD7/ADC10
 const uint8_t CCS_WAKE_PIN  = 8;   // PB4/ADC11/PCINT4
 const uint8_t PER_RES_PIN   = 9;   // PB5/ADC12/PCINT5
 const uint8_t LED_PIN       = 10;  // PB6/ADC13/PCINT6
@@ -43,7 +43,7 @@ struct Conf {
   float hum_alr_lo_set;
   float hum_alr_lo_clr;
   uint8_t temp_en;
-  uint8_t hum_en;  
+  uint8_t hum_en;    
 };
 
 Conf conf;
@@ -55,7 +55,7 @@ void setup() {
   setPins();
   setPeripheral();
   analogReference(INTERNAL);
-  EEPROM.get(0, conf);    
+  loadConf();    
   Serial.begin(115200);  
   rakSerial.begin(9600);
   flashLed3(); 
@@ -74,6 +74,7 @@ void loop() {
     sleepAndWake();
     if (isExtInt) {
       isExtInt = false;
+      digitalWrite(ALARM_PIN, (!digitalRead(CCS_ALR_PIN)) || digitalRead(SHT_ALR_PIN));
       readAll();   
       uplink();      
     }            
@@ -111,7 +112,6 @@ void uplink() {
   if (conf.hum_en) {
     lpp.addRelativeHumidity(2, result.rh);
   } 
-  lpp.addDigitalOutput(20, digitalRead(DOUT_PIN));   
   if (!isPowerUp) {
     isPowerUp = true;
     lpp.addAnalogOutput(30, 0);    
@@ -160,7 +160,7 @@ void setPins() {
   pinMode(CCS_ALR_PIN, INPUT);
   pinMode(SHT_ALR_PIN, INPUT);
   pinMode(RAK_RES_PIN, OUTPUT);
-  pinMode(DOUT_PIN, OUTPUT);
+  pinMode(ALARM_PIN, OUTPUT);
   pinMode(CCS_WAKE_PIN, OUTPUT);
   pinMode(PER_RES_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
@@ -171,12 +171,12 @@ void setPins() {
   pinMode(VEXT_PIN, INPUT);
   pinMode(USB_PIN, INPUT);  
   digitalWrite(RAK_RES_PIN, HIGH);
-  digitalWrite(DOUT_PIN, LOW);
+  digitalWrite(ALARM_PIN, LOW);
   digitalWrite(CCS_WAKE_PIN, HIGH);
   digitalWrite(PER_RES_PIN, HIGH);
   digitalWrite(LED_PIN, HIGH);
   digitalWrite(BAT_ON_PIN, HIGH);
-  digitalWrite(CCS_SUP_PIN, LOW);
+  digitalWrite(CCS_SUP_PIN, HIGH);
   digitalWrite(SHT_SUP_PIN, LOW);  
 }
 void setPeripheral() {
@@ -186,6 +186,15 @@ void setPeripheral() {
   digitalWrite(RAK_RES_PIN, HIGH);
   digitalWrite(PER_RES_PIN, HIGH); 
 }
+void loadConf() {
+  EEPROM.get(0, conf);
+  if (conf.read_period < 1) {
+    conf.read_period = 1; 
+  }
+  if (conf.send_period < 5) {
+    conf.send_period = 5;
+  }  
+}  
 void setSht() {
   Wire.begin();
   sht.begin(0x44);
@@ -396,47 +405,34 @@ void lppDownlinkDec(String str) {
   const uint8_t digOutValue = strtol(buf, NULL, 0);
   if (downCh == 30) {    
     if (confKey == 1) {
-      conf.read_period = confValue;
-      EEPROM.put(0, conf);
+      conf.read_period = confValue;      
     } else if (confKey == 2) {
-      conf.send_period = confValue;
-      EEPROM.put(0, conf);  
+      conf.send_period = confValue;      
     } else if (confKey == 3) {
-      conf.bat_lo_v = confValue;
-      EEPROM.put(0, conf);
+      conf.bat_lo_v = confValue;      
     } else if (confKey == 4) {
-      conf.tmp_alr_hi_set = confValue;
-      EEPROM.put(0, conf);
+      conf.tmp_alr_hi_set = confValue;      
     } else if (confKey == 5) {
-      conf.tmp_alr_hi_clr = confValue;
-      EEPROM.put(0, conf);
+      conf.tmp_alr_hi_clr = confValue;      
     } else if (confKey == 6) {
-      conf.tmp_alr_lo_set = confValue;
-      EEPROM.put(0, conf);
+      conf.tmp_alr_lo_set = confValue;      
     } else if (confKey == 7) {
-      conf.tmp_alr_lo_clr = confValue;
-      EEPROM.put(0, conf);
+      conf.tmp_alr_lo_clr = confValue;      
     } else if (confKey == 8) {
-      conf.hum_alr_hi_set = confValue;
-      EEPROM.put(0, conf);
+      conf.hum_alr_hi_set = confValue;      
     } else if (confKey == 9) {
-      conf.hum_alr_hi_clr = confValue;
-      EEPROM.put(0, conf);  
+      conf.hum_alr_hi_clr = confValue;        
     } else if (confKey == 10) {
-      conf.hum_alr_lo_set = confValue;
-      EEPROM.put(0, conf);
+      conf.hum_alr_lo_set = confValue;      
     } else if (confKey == 11) {
-      conf.hum_alr_lo_clr = confValue;
-      EEPROM.put(0, conf); 
+      conf.hum_alr_lo_clr = confValue;       
     } else if (confKey == 12) {
-      conf.temp_en = confValue;
-      EEPROM.put(0, conf);
+      conf.temp_en = confValue;      
     } else if (confKey == 13) {
-      conf.hum_en = confValue;
-      EEPROM.put(0, conf);   
-    } else if (confKey == 99) {
-      resetMe();  
-    }     
+      conf.hum_en = confValue;       
+    } 
+    EEPROM.put(0, conf);
+    resetMe();  
   }  
 }
 void atRakWake() {  

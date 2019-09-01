@@ -11,7 +11,7 @@
 const uint8_t ADS_CS_PIN    = 7;   // PE6/AIN0/INT6
 const uint8_t DIN_PIN       = 3;   // PD0/SCL/INT0
 const uint8_t RAK_RES_PIN   = 4;   // PD4/ADC8
-const uint8_t DOUT_PIN      = 6;   // PD7/ADC10
+const uint8_t ALARM_PIN      = 6;   // PD7/ADC10
 const uint8_t LED_PIN       = 10;  // PB6/ADC13/PCINT6
 const uint8_t ALT_TX_PIN    = 5;   // PC6
 const uint8_t ALT_RX_PIN    = 13;  // PC7
@@ -41,8 +41,8 @@ struct Conf {
   uint16_t read_period;
   uint16_t send_period;
   float bat_lo_v;
-  uint8_t an;
-  uint8_t dig;
+  uint8_t an_in;
+  uint8_t dig_in;
   float r_ext;
   float tmp_alr_hi_set;
   float tmp_alr_hi_clr;
@@ -64,7 +64,7 @@ void setup() {
   setPins();
   setPeripheral();
   analogReference(INTERNAL);
-  EEPROM.get(0, conf);
+  loadConf();
   Serial.begin(115200);  
   rakSerial.begin(9600); 
   flashLed3();
@@ -80,9 +80,9 @@ void setup() {
 }
 void loop() {  
   for (uint16_t ii = 0; ii < 8 ; ii++) {   
-    sleepAndWake();
+    sleepAndWake();    
     if (isExtInt) {
-      isExtInt = false;
+      isExtInt = false;      
       delay(digDebounce);
       readAll();   
       uplink();      
@@ -94,6 +94,7 @@ void loop() {
     minuteRead = 0;    
     readAll();
     if (isTempAlarm || isBatAlarm) {
+      isTempAlarm = false;
       uplink();      
     }    
   }    
@@ -102,11 +103,11 @@ void loop() {
   }    
 }
 void sleepAndWake() {
-  if (conf.dig == 1) {
+  if (conf.dig_in == 1) {
     attachInterrupt(digitalPinToInterrupt(DIN_PIN), wakeUp, CHANGE);
-  } else if (conf.dig == 2) {
+  } else if (conf.dig_in == 2) {
     attachInterrupt(digitalPinToInterrupt(DIN_PIN), wakeUp, RISING);
-  } else if (conf.dig == 3) {
+  } else if (conf.dig_in == 3) {
     attachInterrupt(digitalPinToInterrupt(DIN_PIN), wakeUp, FALLING);
   }  
   LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF
@@ -118,9 +119,12 @@ void uplink() {
   minuteSend = 0;  
   lpp.reset();
   lpp.addDigitalInput(0, isBatLowPrev); 
-  lpp.addTemperature(1, T);  
-  lpp.addDigitalInput(10, digitalRead(DIN_PIN));
-  lpp.addDigitalOutput(20, digitalRead(DOUT_PIN));  
+  if (conf.an_in) {
+    lpp.addTemperature(1, T);
+  }
+  if (conf.dig_in) {
+    lpp.addDigitalInput(10, digitalRead(DIN_PIN));    
+  } 
   if (!isPowerUp) {
     isPowerUp = true;
     lpp.addAnalogOutput(30, 0);    
@@ -133,10 +137,12 @@ void readAll() {
   wdt_enable(WDTO_8S);
   wdt_reset();
   checkBat();
-  readMv();
-  calcR();
-  calcT();
-  checkTempAlarm();  
+  if (conf.an_in) {
+    readMv();
+    calcR();
+    calcT();
+    checkTempAlarm(); 
+  }
 }
 void readMv() {
   digitalWrite(ASUP_PIN, LOW);
@@ -148,8 +154,8 @@ void calcR() {
   R = ( mV * conf.r_ext ) / ( extRef - mV );
 }
 void calcT() { 
-  if (conf.an) {
-    if (conf.an == type_k) {
+  if (conf.an_in) {
+    if (conf.an_in == type_k) {
       if (mV < rangeMv1) {
         T = pgm_read_float(&k1[0]) + mV*(pgm_read_float(&k1[1]) + mV*(pgm_read_float(&k1[2]) + mV*(pgm_read_float(&k1[3])
           + mV*(pgm_read_float(&k1[4]) + mV*(pgm_read_float(&k1[5]) + mV*(pgm_read_float(&k1[6]) + mV*(pgm_read_float(&k1[7])
@@ -163,9 +169,9 @@ void calcT() {
           + mV*(pgm_read_float(&k2[8]) + mV*(pgm_read_float(&k2[9]))))))))));
       } 
       T = T + ads1118.getTemperature();
-    } else if (conf.an == rtd) {
+    } else if (conf.an_in == rtd) {
       T = ( R - conf.rtd_r0 ) / conf.rtd_coeff;      
-    } else if (conf.an == ntc) {
+    } else if (conf.an_in == ntc) {
       T = R / conf.ntc_r0;     
       T = log(T);              
       T /= conf.ntc_coeff;     
@@ -183,11 +189,12 @@ void checkTempAlarm() {
     isTempExt = false;
   }
   if (isTempExt != isTempExtPrev) {
-    isTempAlarm = true;  
+    isTempAlarm = true;
+    digitalWrite(ALARM_PIN, isTempExt);  
   } else {
     isTempAlarm = false;
   }
-  isTempExtPrev = isTempExt;
+  isTempExtPrev = isTempExt;  
 } 
 void checkBat() {
   power_adc_enable();  
@@ -224,7 +231,7 @@ void setPins() {
   pinMode(ADS_CS_PIN, OUTPUT);
   pinMode(DIN_PIN, INPUT);
   pinMode(RAK_RES_PIN, OUTPUT);
-  pinMode(DOUT_PIN, OUTPUT);
+  pinMode(ALARM_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
   pinMode(BAT_PIN, INPUT);
   pinMode(BAT_ON_PIN, OUTPUT);
@@ -234,7 +241,7 @@ void setPins() {
   pinMode(USB_PIN, INPUT);  
   digitalWrite(ADS_CS_PIN, HIGH);
   digitalWrite(RAK_RES_PIN, HIGH);
-  digitalWrite(DOUT_PIN, LOW);
+  digitalWrite(ALARM_PIN, LOW);
   digitalWrite(LED_PIN, HIGH);
   digitalWrite(BAT_ON_PIN, HIGH);
   digitalWrite(DSUP_PIN, HIGH);
@@ -245,6 +252,15 @@ void setPeripheral() {
   delay(10);
   digitalWrite(RAK_RES_PIN, HIGH);
 }
+void loadConf() {
+  EEPROM.get(0, conf);
+  if (conf.read_period < 1) {
+    conf.read_period = 1; 
+  }
+  if (conf.send_period < 5) {
+    conf.send_period = 5;
+  }  
+}  
 void setAds() {
   ads1118.begin();
   //ads1118.setSampligRate(ads1118.RATE_64SPS);
@@ -290,25 +306,25 @@ void setUsb() {
             Serial.print(F("OK"));
             Serial.println(conf.bat_lo_v);
           }
-        } else if (str.startsWith(F("an"))) {
+        } else if (str.startsWith(F("an_in"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("an="), "");
-            conf.an = str.toInt();
+            str.replace(F("an_in="), "");
+            conf.an_in = str.toInt();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.an);
+            Serial.println(conf.an_in);
           }   
-        } else if (str.startsWith(F("dig"))) {
+        } else if (str.startsWith(F("dig_in"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("dig="), "");
-            conf.dig = str.toInt();
+            str.replace(F("dig_in="), "");
+            conf.dig_in = str.toInt();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.dig);
+            Serial.println(conf.dig_in);
           } 
         } else if (str.startsWith(F("r_ext"))) {
           if (str.indexOf(F("=")) >= 0) {
@@ -472,53 +488,38 @@ void lppDownlinkDec(String str) {
   const uint8_t digOutValue = strtol(buf, NULL, 0);
   if (downCh == 30) {    
     if (confKey == 1) {
-      conf.read_period = confValue;
-      EEPROM.put(0, conf);
+      conf.read_period = confValue;      
     } else if (confKey == 2) {
-      conf.send_period = confValue;
-      EEPROM.put(0, conf);  
+      conf.send_period = confValue;       
     } else if (confKey == 3) {
-      conf.bat_lo_v = confValue;
-      EEPROM.put(0, conf);
+      conf.bat_lo_v = confValue;      
     } else if (confKey == 4) {
-      conf.an = confValue;
-      EEPROM.put(0, conf);
+      conf.an_in = confValue;      
     } else if (confKey == 5) {
-      conf.dig = confValue;
-      EEPROM.put(0, conf);
+      conf.dig_in = confValue;      
     } else if (confKey == 6) {
-      conf.r_ext = confValue;
-      EEPROM.put(0, conf);
+      conf.r_ext = confValue;      
     } else if (confKey == 7) {
-      conf.tmp_alr_hi_set = confValue;
-      EEPROM.put(0, conf);
+      conf.tmp_alr_hi_set = confValue;      
     } else if (confKey == 8) {
-      conf.tmp_alr_hi_clr = confValue;
-      EEPROM.put(0, conf);
+      conf.tmp_alr_hi_clr = confValue;      
     } else if (confKey == 9) {
-      conf.tmp_alr_lo_set = confValue;
-      EEPROM.put(0, conf);
+      conf.tmp_alr_lo_set = confValue;      
     } else if (confKey == 10) {
-      conf.tmp_alr_lo_clr = confValue;
-      EEPROM.put(0, conf);    
+      conf.tmp_alr_lo_clr = confValue;         
     } else if (confKey == 11) {
-      conf.rtd_r0 = confValue;
-      EEPROM.put(0, conf);
+      conf.rtd_r0 = confValue;      
     } else if (confKey == 12) {
-      conf.rtd_coeff = confValue;
-      EEPROM.put(0, conf);
+      conf.rtd_coeff = confValue;      
     } else if (confKey == 13) {
-      conf.ntc_coeff = confValue;
-      EEPROM.put(0, conf); 
+      conf.ntc_coeff = confValue;      
     } else if (confKey == 14) {
-      conf.ntc_r0 = confValue;
-      EEPROM.put(0, conf); 
+      conf.ntc_r0 = confValue;      
     } else if (confKey == 15) {
-      conf.ntc_t0 = confValue;
-      EEPROM.put(0, conf);    
-    } else if (confKey == 99) {
-      resetMe();  
-    }     
+      conf.ntc_t0 = confValue;         
+    }
+    EEPROM.put(0, conf);
+    resetMe();  
   }  
 }
 void atRakWake() {  
