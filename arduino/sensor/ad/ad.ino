@@ -48,8 +48,8 @@ struct Conf {
   float tmp_alr_hi_clr;
   float tmp_alr_lo_set;
   float tmp_alr_lo_clr;
-  float rtd_r0 = 100;  
-  float rtd_coeff = 0.3851;  
+  float rtd_r0;  
+  float rtd_coeff;  
   float ntc_coeff;  
   float ntc_r0;
   float ntc_t0;  
@@ -63,6 +63,7 @@ CayenneLPP lpp(51);
 void setup() {
   setPins();
   setPeripheral();
+  analogReference(INTERNAL);
   EEPROM.get(0, conf);
   Serial.begin(115200);  
   rakSerial.begin(9600); 
@@ -82,6 +83,7 @@ void loop() {
     sleepAndWake();
     if (isExtInt) {
       isExtInt = false;
+      delay(digDebounce);
       readAll();   
       uplink();      
     }            
@@ -116,8 +118,7 @@ void uplink() {
   minuteSend = 0;  
   lpp.reset();
   lpp.addDigitalInput(0, isBatLowPrev); 
-  lpp.addTemperature(1, T);
-  delay(digDebounce);
+  lpp.addTemperature(1, T);  
   lpp.addDigitalInput(10, digitalRead(DIN_PIN));
   lpp.addDigitalOutput(20, digitalRead(DOUT_PIN));  
   if (!isPowerUp) {
@@ -189,8 +190,7 @@ void checkTempAlarm() {
   isTempExtPrev = isTempExt;
 } 
 void checkBat() {
-  power_adc_enable();
-  analogReference(INTERNAL);
+  power_adc_enable();  
   digitalWrite(BAT_ON_PIN, LOW);
   delay(supOnDly);
   uint16_t samples[batSampNum];
