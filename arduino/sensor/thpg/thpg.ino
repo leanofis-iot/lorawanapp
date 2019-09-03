@@ -8,21 +8,14 @@
 #include <CayenneLPP.h>
 //#include <stdlib.h>
 
-const uint8_t CCS_ALR_PIN   = 0;   // PD2/RXD1/INT2
-const uint8_t SHT_ALR_PIN   = 1;   // PD3/TXD1/INT3
+const uint8_t SHT_ALR_PIN   = 0;   // PD2/RXD1/INT2
+const uint8_t SHT_RES_PIN   = 1;   // PD3/TXD1/INT3
 const uint8_t RAK_RES_PIN   = 4;   // PD4/ADC8
-const uint8_t ALARM_PIN      = 6;   // PD7/ADC10
-const uint8_t CCS_WAKE_PIN  = 8;   // PB4/ADC11/PCINT4
-const uint8_t PER_RES_PIN   = 9;   // PB5/ADC12/PCINT5
 const uint8_t LED_PIN       = 10;  // PB6/ADC13/PCINT6
 const uint8_t ALT_TX_PIN    = 5;   // PC6
 const uint8_t ALT_RX_PIN    = 13;  // PC7
 const uint8_t BAT_PIN       = A0;  // PF7/ADC7
 const uint8_t BAT_ON_PIN    = A1;  // PF6/ADC6
-const uint8_t CCS_SUP_PIN   = A2;  // PF5/ADC5
-const uint8_t SHT_SUP_PIN   = A3;  // PF4/ADC4
-const uint8_t VEXT_PIN      = A4;  // PF1/ADC1
-const uint8_t USB_PIN       = A5;  // PF0/ADC0
 
 const uint8_t supOnDly = 1, batSampDly = 1, batSampNum = 3;
 uint16_t minuteRead, minuteSend;
@@ -61,7 +54,7 @@ void setup() {
   rakSerial.begin(9600);
   flashLed3(); 
   delay(5000);
-  if (digitalRead(USB_PIN) == HIGH) {
+  if (USBSTA >> VBUS & 1) {
     setUsb();
   } 
   setSht();  
@@ -75,7 +68,6 @@ void loop() {
     sleepAndWake();
     if (isExtInt) {
       isExtInt = false;
-      digitalWrite(ALARM_PIN, (!digitalRead(CCS_ALR_PIN)) || digitalRead(SHT_ALR_PIN));
       readAll();   
       uplink();      
     }            
@@ -94,12 +86,10 @@ void loop() {
   }    
 }
 void sleepAndWake() {
-  attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUpSht, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(CCS_ALR_PIN), wakeUpCcs, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUpSht, CHANGE);  
   LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF
   //isExtInt = INTF2 || INTF3;  
-  detachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN));
-  detachInterrupt(digitalPinToInterrupt(CCS_ALR_PIN));  
+  detachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN));  
 }
 void uplink() {
   minuteRead = 0;
@@ -157,35 +147,24 @@ void checkBat() {
   }
   isBatLowPrev = isBatLow;
 }
-void setPins() {
-  pinMode(CCS_ALR_PIN, INPUT);
+void setPins() {  
   pinMode(SHT_ALR_PIN, INPUT);
-  pinMode(RAK_RES_PIN, OUTPUT);
-  pinMode(ALARM_PIN, OUTPUT);
-  pinMode(CCS_WAKE_PIN, OUTPUT);
-  pinMode(PER_RES_PIN, OUTPUT);
+  pinMode(RAK_RES_PIN, OUTPUT);  
+  pinMode(SHT_RES_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
   pinMode(BAT_PIN, INPUT);
-  pinMode(BAT_ON_PIN, OUTPUT);
-  pinMode(CCS_SUP_PIN, OUTPUT);
-  pinMode(SHT_SUP_PIN, OUTPUT);
-  pinMode(VEXT_PIN, INPUT);
-  pinMode(USB_PIN, INPUT);  
-  digitalWrite(RAK_RES_PIN, HIGH);
-  digitalWrite(ALARM_PIN, LOW);
-  digitalWrite(CCS_WAKE_PIN, HIGH);
-  digitalWrite(PER_RES_PIN, HIGH);
+  pinMode(BAT_ON_PIN, OUTPUT);   
+  digitalWrite(RAK_RES_PIN, HIGH);  
+  digitalWrite(SHT_RES_PIN, HIGH);
   digitalWrite(LED_PIN, HIGH);
-  digitalWrite(BAT_ON_PIN, HIGH);
-  digitalWrite(CCS_SUP_PIN, HIGH);
-  digitalWrite(SHT_SUP_PIN, LOW);  
+  digitalWrite(BAT_ON_PIN, HIGH);   
 }
 void setPeripheral() {
   digitalWrite(RAK_RES_PIN, LOW);
-  digitalWrite(PER_RES_PIN, LOW); 
+  digitalWrite(SHT_RES_PIN, LOW); 
   delay(10);
   digitalWrite(RAK_RES_PIN, HIGH);
-  digitalWrite(PER_RES_PIN, HIGH); 
+  digitalWrite(SHT_RES_PIN, HIGH); 
 }
 void loadConf() {
   EEPROM.get(0, conf);

@@ -4,25 +4,16 @@
 #include <AltSoftSerial.h>
 #include <EEPROM.h>
 #include <Wire.h>
-#include "ClosedCube_SHT31D.h"
+#include "ClosedCube_BME680.h"
 #include <CayenneLPP.h>
 //#include <stdlib.h>
 
-const uint8_t CCS_ALR_PIN   = 0;   // PD2/RXD1/INT2
-const uint8_t SHT_ALR_PIN   = 1;   // PD3/TXD1/INT3
 const uint8_t RAK_RES_PIN   = 4;   // PD4/ADC8
-const uint8_t ALARM_PIN      = 6;   // PD7/ADC10
-const uint8_t CCS_WAKE_PIN  = 8;   // PB4/ADC11/PCINT4
-const uint8_t PER_RES_PIN   = 9;   // PB5/ADC12/PCINT5
 const uint8_t LED_PIN       = 10;  // PB6/ADC13/PCINT6
 const uint8_t ALT_TX_PIN    = 5;   // PC6
 const uint8_t ALT_RX_PIN    = 13;  // PC7
 const uint8_t BAT_PIN       = A0;  // PF7/ADC7
 const uint8_t BAT_ON_PIN    = A1;  // PF6/ADC6
-const uint8_t CCS_SUP_PIN   = A2;  // PF5/ADC5
-const uint8_t SHT_SUP_PIN   = A3;  // PF4/ADC4
-const uint8_t VEXT_PIN      = A4;  // PF1/ADC1
-const uint8_t USB_PIN       = A5;  // PF0/ADC0
 
 const uint8_t supOnDly = 1, batSampDly = 1, batSampNum = 3;
 uint16_t minuteRead, minuteSend;
@@ -41,14 +32,12 @@ struct Conf {
   float hum_alr_hi_set;
   float hum_alr_hi_clr;
   float hum_alr_lo_set;
-  float hum_alr_lo_clr;
-  uint8_t temp_en;
-  uint8_t hum_en;    
+  float hum_alr_lo_clr;  
 };
 
 Conf conf;
 AltSoftSerial rakSerial;
-ClosedCube_SHT31D sht;
+ClosedCube_BME680 bme680;
 CayenneLPP lpp(51);
 
 void setup() {
@@ -61,10 +50,10 @@ void setup() {
   rakSerial.begin(9600);
   flashLed3(); 
   delay(5000);
-  if (digitalRead(USB_PIN) == HIGH) {
+  if (USBSTA >> VBUS & 1) {
     setUsb();
   } 
-  setSht();  
+  setBme();  
   readAll();
   atRakClrSerial();
   atRakJoinOtaa();  
@@ -75,7 +64,6 @@ void loop() {
     sleepAndWake();
     if (isExtInt) {
       isExtInt = false;
-      digitalWrite(ALARM_PIN, (!digitalRead(CCS_ALR_PIN)) || digitalRead(SHT_ALR_PIN));
       readAll();   
       uplink();      
     }            
@@ -94,25 +82,19 @@ void loop() {
   }    
 }
 void sleepAndWake() {
-  attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUpSht, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(CCS_ALR_PIN), wakeUpCcs, CHANGE);
   LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF
-  //isExtInt = INTF2 || INTF3;  
-  detachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN));
-  detachInterrupt(digitalPinToInterrupt(CCS_ALR_PIN));  
+  //isExtInt = INTF2 || INTF3;   
 }
 void uplink() {
   minuteRead = 0;
   minuteSend = 0;  
-  SHT31D result = sht.periodicFetchData();
   lpp.reset();
   lpp.addDigitalInput(0, isBatLowPrev); 
-  if (conf.temp_en) {
-    lpp.addTemperature(1, result.t);
-  }
-  if (conf.hum_en) {
-    lpp.addRelativeHumidity(2, result.rh);
-  } 
+  //lpp.addTemperature(1, bme.temperature);
+  //lpp.addRelativeHumidity(2, bme.humidity);
+  //lpp.add(3, bme.pressure / 100.0);
+  //lpp.add(4, bme.gas_resistance / 1000.0);
+  //lpp.add(5, bme.readAltitude(SEALEVELPRESSURE_HPA));   
   if (!isPowerUp) {
     isPowerUp = true;
     lpp.addAnalogOutput(30, 0);    
@@ -124,7 +106,19 @@ void uplink() {
 void readAll() {
   wdt_enable(WDTO_8S);
   wdt_reset();
-  checkBat();  
+  checkBat();
+  bme680.setForcedMode();  
+  while(true) {
+    ClosedCube_BME680_Status status = bme680.readStatus();
+    if (status.newDataFlag) {
+      double temp = bme680.readTemperature();
+      double pres = bme680.readPressure();
+      double hum = bme680.readHumidity();
+      uint32_t gas = bme680.readGasResistance();  
+    } else {
+      delay(200); 
+    }
+  }  
 }
 void checkBat() {
   power_adc_enable();  
@@ -157,35 +151,19 @@ void checkBat() {
   }
   isBatLowPrev = isBatLow;
 }
-void setPins() {
-  pinMode(CCS_ALR_PIN, INPUT);
-  pinMode(SHT_ALR_PIN, INPUT);
-  pinMode(RAK_RES_PIN, OUTPUT);
-  pinMode(ALARM_PIN, OUTPUT);
-  pinMode(CCS_WAKE_PIN, OUTPUT);
-  pinMode(PER_RES_PIN, OUTPUT);
+void setPins() {    
+  pinMode(RAK_RES_PIN, OUTPUT);  
   pinMode(LED_PIN, OUTPUT);
   pinMode(BAT_PIN, INPUT);
-  pinMode(BAT_ON_PIN, OUTPUT);
-  pinMode(CCS_SUP_PIN, OUTPUT);
-  pinMode(SHT_SUP_PIN, OUTPUT);
-  pinMode(VEXT_PIN, INPUT);
-  pinMode(USB_PIN, INPUT);  
-  digitalWrite(RAK_RES_PIN, HIGH);
-  digitalWrite(ALARM_PIN, LOW);
-  digitalWrite(CCS_WAKE_PIN, HIGH);
-  digitalWrite(PER_RES_PIN, HIGH);
+  pinMode(BAT_ON_PIN, OUTPUT);   
+  digitalWrite(RAK_RES_PIN, HIGH);  
   digitalWrite(LED_PIN, HIGH);
-  digitalWrite(BAT_ON_PIN, HIGH);
-  digitalWrite(CCS_SUP_PIN, HIGH);
-  digitalWrite(SHT_SUP_PIN, LOW);  
+  digitalWrite(BAT_ON_PIN, HIGH);   
 }
 void setPeripheral() {
   digitalWrite(RAK_RES_PIN, LOW);
-  digitalWrite(PER_RES_PIN, LOW); 
   delay(10);
-  digitalWrite(RAK_RES_PIN, HIGH);
-  digitalWrite(PER_RES_PIN, HIGH); 
+  digitalWrite(RAK_RES_PIN, HIGH);  
 }
 void loadConf() {
   EEPROM.get(0, conf);
@@ -196,13 +174,13 @@ void loadConf() {
     conf.send_period = 5;
   }  
 }  
-void setSht() {
+void setBme() {
   Wire.begin();
-  sht.begin(0x44);
-  sht.clearAll();
-  sht.periodicStart(SHT3XD_REPEATABILITY_LOW, SHT3XD_FREQUENCY_1HZ);
-  sht.writeAlertHigh(conf.tmp_alr_hi_set, conf.tmp_alr_hi_clr, conf.hum_alr_hi_set, conf.hum_alr_hi_clr);
-  sht.writeAlertLow(conf.tmp_alr_lo_clr, conf.tmp_alr_lo_set, conf.hum_alr_lo_clr, conf.hum_alr_lo_set); 
+  bme680.init(0x77);
+  bme680.reset();
+  bme680.setOversampling(BME680_OVERSAMPLING_X1, BME680_OVERSAMPLING_X2, BME680_OVERSAMPLING_X16);
+  bme680.setIIRFilter(BME680_FILTER_3);
+  bme680.setGasOn(300, 100);  
 }
 void setUsb() {
   String str;
@@ -323,27 +301,7 @@ void setUsb() {
           } else {
             Serial.print(F("OK"));
             Serial.println(conf.hum_alr_lo_clr);
-          }  
-        } else if (str.startsWith(F("temp_en"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("temp_en="), "");
-            conf.temp_en = str.toInt();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.temp_en);
-          }  
-        } else if (str.startsWith(F("hum_en"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("hum_en="), "");
-            conf.hum_en = str.toInt();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.hum_en);
-          }                    
+          }         
         }
         str = "";        
       }      
@@ -426,11 +384,7 @@ void lppDownlinkDec(String str) {
     } else if (confKey == 10) {
       conf.hum_alr_lo_set = confValue;      
     } else if (confKey == 11) {
-      conf.hum_alr_lo_clr = confValue;       
-    } else if (confKey == 12) {
-      conf.temp_en = confValue;      
-    } else if (confKey == 13) {
-      conf.hum_en = confValue;       
+      conf.hum_alr_lo_clr = confValue;          
     } 
     EEPROM.put(0, conf);
     resetMe();  
@@ -474,12 +428,6 @@ String RakReadLine(const unsigned long wdtMs) {
 void resetMe() {
   wdt_enable(WDTO_15MS);
   while(true); 
-}
-void wakeUpSht() {
-  isExtInt = true;   
-}
-void wakeUpCcs() { 
-  isExtInt = true;   
 }
 void flashLed() {
   digitalWrite(LED_PIN, LOW);
