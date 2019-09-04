@@ -19,8 +19,6 @@ const uint8_t BAT_PIN       = A0;  // PF7/ADC7
 const uint8_t BAT_ON_PIN    = A1;  // PF6/ADC6
 const uint8_t DSUP_PIN      = A2;  // PF5/ADC5
 const uint8_t ASUP_PIN      = A3;  // PF4/ADC4
-const uint8_t VEXT_PIN      = A4;  // PF1/ADC1
-const uint8_t USB_PIN       = A5;  // PF0/ADC0
 
 const uint8_t change = 1, rising = 2, falling = 3;
 const uint8_t digDebounce = 10;
@@ -70,9 +68,9 @@ void setup() {
   rakSerial.begin(9600); 
   flashLed3();
   delay(5000);
-  if (digitalRead(USB_PIN) == HIGH) {
+  if (USBSTA >> VBUS & 1) {
     setUsb();
-  }
+  } 
   setAds();   
   readAll();
   atRakClrSerial();
@@ -112,7 +110,6 @@ void sleepAndWake() {
     attachInterrupt(digitalPinToInterrupt(DIN_PIN), wakeUp, FALLING);
   }  
   LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF
-  //isExtInt = INTF2 || INTF3;  
   detachInterrupt(digitalPinToInterrupt(DIN_PIN));   
 }
 void uplink() {  
@@ -237,9 +234,7 @@ void setPins() {
   pinMode(BAT_PIN, INPUT);
   pinMode(BAT_ON_PIN, OUTPUT);
   pinMode(DSUP_PIN, OUTPUT);
-  pinMode(ASUP_PIN, OUTPUT);
-  pinMode(VEXT_PIN, INPUT);
-  pinMode(USB_PIN, INPUT);  
+  pinMode(ASUP_PIN, OUTPUT);   
   digitalWrite(ADS_CS_PIN, HIGH);
   digitalWrite(RAK_RES_PIN, HIGH);
   digitalWrite(ALARM_PIN, LOW);
