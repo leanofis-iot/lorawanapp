@@ -16,8 +16,11 @@ const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
 const uint8_t VOUT_EN_PIN   = A3;  // PF4/ADC4
 const uint8_t ADS_CS_PIN    = A4;  // PF1/ADC1
 
-float mV[2], R[2], T[2];
-const float rtd_coeff = 0.3851, rtd_r0 = 100, extRef = 2500, r_ext = 3000;
+float mV[2], T[2];
+const float rangeMv1 = 0, rangeMv2 = 20.644;
+const float k1[] PROGMEM = {0.0000000E+0, 2.5173462E+1, -1.1662878E+0, -1.0833638E+0, -8.9773540E-1, -3.7342377E-1, -8.6632643E-2, -1.0450598E-2, -5.1920577E-4}; 
+const float k2[] PROGMEM = {0.0000000E+0, 2.5083550E+1, 7.8601060E-2, -2.5031310E-1, 8.3152700E-2, -1.2280340E-2, 9.8040360E-4, -4.4130300E-5, 1.0577340E-6, -1.0527550E-8};
+const float k3[] PROGMEM = {-1.3180580E+2, 4.8302220E+1, -1.6460310E+0, 5.4647310E-2, -9.6507150E-4, 8.8021930E-6, -3.1108100E-8};  
 bool isAlarm, isTempOverPrev[2], isBatLowPrev, isPowerUp;
 const uint8_t vrefEnDly = 1, batEnDly = 1, batSampDly = 1, batSampNum = 3;
 uint16_t minuteRead, minuteSend;
@@ -103,7 +106,6 @@ void readAll() {
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.inp_en[ch]) {
       readMv(ch);
-      calcR(ch);
       calcT(ch);
       calcTempAlarm(ch); 
     }
@@ -119,11 +121,20 @@ void readMv(uint8_t ch) {
   } 
   digitalWrite(VREF_EN_PIN, HIGH);  
 }
-void calcR(uint8_t ch) {
-  R[ch] = ( mV[ch] * r_ext ) / ( extRef - mV[ch] );  
-}
 void calcT(uint8_t ch) {     
-  T[ch] = ( R[ch] - rtd_r0 ) / rtd_coeff;    
+  if (mV[ch] < rangeMv1) {
+    T[ch] = pgm_read_float(&k1[0]) + mV[ch]*(pgm_read_float(&k1[1]) + mV[ch]*(pgm_read_float(&k1[2]) + mV[ch]*(pgm_read_float(&k1[3])
+      + mV[ch]*(pgm_read_float(&k1[4]) + mV[ch]*(pgm_read_float(&k1[5]) + mV[ch]*(pgm_read_float(&k1[6]) + mV[ch]*(pgm_read_float(&k1[7])
+      + mV[ch]*(pgm_read_float(&k1[8])))))))));      
+  } else if (mV[ch] > rangeMv2) {
+    T[ch] = pgm_read_float(&k3[0]) + mV[ch]*(pgm_read_float(&k3[1]) + mV[ch]*(pgm_read_float(&k3[2]) + mV[ch]*(pgm_read_float(&k3[3])
+      + mV[ch]*(pgm_read_float(&k3[4]) + mV[ch]*(pgm_read_float(&k3[5]) + mV[ch]*(pgm_read_float(&k3[6])))))));
+  } else {
+    T[ch] = pgm_read_float(&k2[0]) + mV[ch]*(pgm_read_float(&k2[1]) + mV[ch]*(pgm_read_float(&k2[2]) + mV[ch]*(pgm_read_float(&k2[3])
+      + mV[ch]*(pgm_read_float(&k2[4]) + mV[ch]*(pgm_read_float(&k2[5]) + mV[ch]*(pgm_read_float(&k2[6]) + mV[ch]*(pgm_read_float(&k2[7])
+      + mV[ch]*(pgm_read_float(&k2[8]) + mV[ch]*(pgm_read_float(&k2[9]))))))))));
+  } 
+  T[ch] = T[ch] + ads1118.getTemperature();    
 }
 void calcTempAlarm(uint8_t ch) {  
   bool isTempOver; 
