@@ -4,40 +4,29 @@
 #include <AltSoftSerial.h>
 #include <EEPROM.h>
 #include <CayenneLPP.h>
-#include "ADS1118.h"
-#include <SPI.h>
 //#include <stdlib.h>
 
+const uint8_t DIG_PIN[4]    = {3, 2, 0, 1};   // PD0/SCL/INT0, PD1/SDA/INT1, PD2/RXD1/INT2, PD3/TXD1/INT3 
 const uint8_t RAK_RES_PIN   = 4;   // PD4/ADC8
 const uint8_t LED_PIN       = 10;  // PB6/ADC13/PCINT6
 const uint8_t BAT_PIN       = A0;  // PF7/ADC7
 const uint8_t BAT_EN_PIN    = A1;  // PF6/ADC6
 const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
 const uint8_t VOUT_EN_PIN   = A3;  // PF4/ADC4
-const uint8_t ADS_CS_PIN    = A4;  // PF1/ADC1
 
-float mV[2], Val[2];
-bool isAlarm, isValOverPrev[2], isBatLowPrev, isPowerUp;
-const uint8_t voutEnDly = 1, batEnDly = 1, batSampDly = 1, batSampNum = 3;
-uint16_t minuteRead, minuteSend;
+volatile bool isAlarm;
+bool isBatLowPrev, isPowerUp;
+const uint8_t batEnDly = 1, batSampDly = 1, batSampNum = 3, digDebounce = 10;
+uint16_t minuteRead;
 const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
 
 struct Conf {
   uint16_t read_t;
-  uint16_t send_t;
   float bat_lo_v;  
-  uint8_t inp_en[2];  
-  float val_alr_hi[2];
-  float val_alr_lo[2];
-  float val_alr_hys[2];  
-  float val_max[2];
-  float val_min[2]; 
-  float volt_max[2];
-  float volt_min[2];
+  uint8_t dig_int[4];  
 };
 
 Conf conf;
-ADS1118 ads1118(ADS_CS_PIN);
 AltSoftSerial rakSerial;
 CayenneLPP lpp(51);
 
@@ -54,7 +43,6 @@ void setup() {
   if (USBSTA >> VBUS & 1) {
     setUsb();
   } 
-  setAds();   
   readAll();
   atRakClrSerial();
   atRakJoinOtaa();    
@@ -62,33 +50,42 @@ void setup() {
 }
 void loop() {  
   for (uint8_t ii = 0; ii < 8 ; ii++) {   
-    sleepAndWake();             
+    sleepAndWake();
+    if (isAlarm) {
+      delay(digDebounce);       
+      uplink();      
+    }               
   }    
   minuteRead++;
-  minuteSend++;  
   if (minuteRead >= conf.read_t) {
     minuteRead = 0;    
     readAll();
     if (isAlarm) {      
       uplink();      
     }    
-  }    
-  if (minuteSend >= conf.send_t) {
-    uplink();
-  }    
+  }   
 }
 void sleepAndWake() {  
+  for (uint8_t ch = 0; ch < 4 ; ch++) {
+    if (conf.dig_int[ch]) {
+      attachInterrupt(digitalPinToInterrupt(DIG_PIN[ch]), wakeUp, conf.dig_int[ch]);    
+    }    
+  }    
   LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF     
+  for (uint8_t ch = 0; ch < 4 ; ch++) {
+    if (conf.dig_int[ch]) {
+      detachInterrupt(digitalPinToInterrupt(DIG_PIN[ch])); 
+    }    
+  }  
 }
 void uplink() { 
   isAlarm = false; 
   minuteRead = 0;
-  minuteSend = 0;  
   lpp.reset();
-  lpp.addDigitalInput(0, isBatLowPrev); 
-  for (uint8_t ch = 0; ch < 2 ; ch++) {
-    if (conf.inp_en[ch]) {
-      lpp.addAnalogInput(ch + 1, Val[ch]);
+  lpp.addDigitalInput(0, isBatLowPrev);  
+  for (uint8_t ch = 0; ch < 4 ; ch++) {
+    if (conf.dig_int[ch]) {
+      lpp.addDigitalInput(ch + 1, digitalRead(DIG_PIN[ch]));
     } 
   } 
   if (!isPowerUp) {
@@ -102,42 +99,8 @@ void uplink() {
 void readAll() {
   wdt_enable(WDTO_8S);
   wdt_reset();
-  calcBatAlarm();
-  for (uint8_t ch = 0; ch < 2 ; ch++) {
-    if (conf.inp_en[ch]) {
-      readMv(ch);
-      calcVal(ch);
-      calcValAlarm(ch); 
-    }
-  }  
+  calcBatAlarm();  
 }
-void readMv(uint8_t ch) {
-  digitalWrite(VOUT_EN_PIN, LOW);
-  delay(voutEnDly);
-  if (ch == 0) {
-    mV[0] = ads1118.getMilliVolts(ads1118.DIFF_0_1);
-  } else if (ch == 1) {
-    mV[1] = ads1118.getMilliVolts(ads1118.DIFF_2_3);
-  } 
-  digitalWrite(VOUT_EN_PIN, HIGH);  
-}
-void calcVal(uint8_t ch) { 
-  mV[ch] = mV[ch] * 10000 / 2048;
-  Val[ch] = (mV[ch] - conf.volt_min[ch] * 1000) * (conf.val_max[ch] - conf.val_min[ch]) / (conf.volt_max[ch] - conf.volt_min[ch]) + conf.val_min[ch] * 1000;  
-  //(x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;  
-}
-void calcValAlarm(uint8_t ch) {  
-  bool isValOver; 
-  if ((Val[ch] >= conf.val_alr_hi[ch] + conf.val_alr_hys[ch]) || (Val[ch] <= conf.val_alr_lo[ch] - conf.val_alr_hys[ch])) {
-    isValOver = true;    
-  } else if ((Val[ch] <= conf.val_alr_hi[ch] - conf.val_alr_hys[ch]) || (Val[ch] >= conf.val_alr_lo[ch] + conf.val_alr_hys[ch])) {
-    isValOver = false;
-  }
-  if (isValOver != isValOverPrev[ch]) {
-    isValOverPrev[ch] = isValOver;
-    isAlarm = true;          
-  }    
-} 
 void calcBatAlarm() {
   power_adc_enable();  
   digitalWrite(BAT_EN_PIN, LOW);
@@ -167,21 +130,22 @@ void calcBatAlarm() {
     isAlarm = true;  
   }  
 }
-void setPins() {
-  pinMode(RAK_RES_PIN, OUTPUT);
+void setPins() {  
+  for (uint8_t ch = 0; ch < 4 ; ch++) {
+    pinMode(DIG_PIN[ch], INPUT);
+  }  
+  pinMode(RAK_RES_PIN, OUTPUT);  
   pinMode(LED_PIN, OUTPUT);  
   pinMode(BAT_PIN, INPUT);
   pinMode(BAT_EN_PIN, OUTPUT);
   pinMode(VREF_EN_PIN, OUTPUT);
-  pinMode(VOUT_EN_PIN, OUTPUT);
-  pinMode(ADS_CS_PIN, OUTPUT);
+  pinMode(VOUT_EN_PIN, OUTPUT);  
   
   digitalWrite(RAK_RES_PIN, HIGH);
   digitalWrite(LED_PIN, HIGH);
   digitalWrite(BAT_EN_PIN, HIGH);
   digitalWrite(VREF_EN_PIN, HIGH);
-  digitalWrite(VOUT_EN_PIN, LOW);
-  digitalWrite(ADS_CS_PIN, HIGH);
+  digitalWrite(VOUT_EN_PIN, LOW);  
 }
 void setPeripheral() {
   digitalWrite(RAK_RES_PIN, LOW);
@@ -192,17 +156,8 @@ void loadConf() {
   EEPROM.get(0, conf);
   if (conf.read_t < 1) {
     conf.read_t = 1; 
-  }
-  if (conf.send_t < 5) {
-    conf.send_t = 5;
-  }   
+  }  
 }  
-void setAds() {
-  ads1118.begin();
-  //ads1118.setSampligRate(ads1118.RATE_64SPS);
-  ads1118.setFullScaleRange(ads1118.FSR_2048);
-  ads1118.disablePullup(); 
-}
 void setUsb() {
   String str;
   while (true) {   
@@ -222,17 +177,7 @@ void setUsb() {
           } else {
             Serial.print(F("OK"));
             Serial.println(conf.read_t);
-          } 
-        } else if (str.startsWith(F("send_t"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("send_t="), "");
-            conf.send_t = str.toInt();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.send_t);
-          }             
+          }         
         } else if (str.startsWith(F("bat_lo_v"))) {
           if (str.indexOf(F("=")) >= 0) {
             str.replace(F("bat_lo_v="), "");
@@ -243,166 +188,46 @@ void setUsb() {
             Serial.print(F("OK"));
             Serial.println(conf.bat_lo_v);
           }          
-        } else if (str.startsWith(F("inp_en_1"))) {
+        } else if (str.startsWith(F("dig_int_1"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("inp_en_1="), "");
-            conf.inp_en[0] = str.toInt();
+            str.replace(F("dig_int_1="), "");
+            conf.dig_int[0] = str.toInt();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.inp_en[0]);
+            Serial.println(conf.dig_int[0]);
           } 
-        } else if (str.startsWith(F("inp_en_2"))) {
+        } else if (str.startsWith(F("dig_int_2"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("inp_en_2="), "");
-            conf.inp_en[1] = str.toInt();
+            str.replace(F("dig_int_2="), "");
+            conf.dig_int[1] = str.toInt();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.inp_en[1]);
+            Serial.println(conf.dig_int[1]);
           }
-        } else if (str.startsWith(F("val_alr_hi_1"))) {
+        } else if (str.startsWith(F("dig_int_3"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("val_alr_hi_1="), "");
-            conf.val_alr_hi[0] = str.toFloat();
+            str.replace(F("dig_int_3="), "");
+            conf.dig_int[2] = str.toInt();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.val_alr_hi[0]);
-          }
-        } else if (str.startsWith(F("val_alr_hi_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("val_alr_hi_2="), "");
-            conf.val_alr_hi[1] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.val_alr_hi[1]);
+            Serial.println(conf.dig_int[2]);
           } 
-        } else if (str.startsWith(F("val_alr_lo_1"))) {
+        } else if (str.startsWith(F("dig_int_4"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("val_alr_lo_1="), "");
-            conf.val_alr_lo[0] = str.toFloat();
+            str.replace(F("dig_int_4="), "");
+            conf.dig_int[3] = str.toInt();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.val_alr_lo[0]);
-          }
-        } else if (str.startsWith(F("val_alr_lo_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("val_alr_lo_2="), "");
-            conf.val_alr_lo[1] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.val_alr_lo[1]);
-          }
-        } else if (str.startsWith(F("val_alr_hys_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("val_alr_hys_1="), "");
-            conf.val_alr_hys[0] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.val_alr_hys[0]);
-          } 
-        } else if (str.startsWith(F("val_alr_hys_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("val_alr_hys_2="), "");
-            conf.val_alr_hys[1] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.val_alr_hys[1]);
+            Serial.println(conf.dig_int[3]);
           }        
-        } else if (str.startsWith(F("val_max_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("val_max_1="), "");
-            conf.val_max[0] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.val_max[0]);
-          } 
-        } else if (str.startsWith(F("val_max_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("val_max_2="), "");
-            conf.val_max[1] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.val_max[1]);
-          } 
-        } else if (str.startsWith(F("val_min_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("val_min_1="), "");
-            conf.val_min[0] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.val_min[0]);
-          } 
-        } else if (str.startsWith(F("val_min_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("val_min_2="), "");
-            conf.val_min[1] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.val_min[1]);
-          }
-        } else if (str.startsWith(F("volt_max_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("volt_max_1="), "");
-            conf.volt_max[0] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.volt_max[0]);
-          } 
-        } else if (str.startsWith(F("volt_max_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("volt_max_2="), "");
-            conf.volt_max[1] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.volt_max[1]);
-          }
-        } else if (str.startsWith(F("volt_min_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("volt_min_1="), "");
-            conf.volt_min[0] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.volt_min[0]);
-          } 
-        } else if (str.startsWith(F("volt_min_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("volt_min_2="), "");
-            conf.volt_min[1] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.volt_min[1]);
-          }          
         }
         str = "";        
       }      
@@ -465,43 +290,17 @@ void lppDownlinkDec(String str) {
   const uint8_t digOutValue = strtol(buf, NULL, 0);
   if (downCh == 30) {    
     if (confKey == 1) {
-      conf.read_t = confValue;      
+      conf.read_t = confValue;         
     } else if (confKey == 2) {
-      conf.send_t = confValue;       
-    } else if (confKey == 3) {
       conf.bat_lo_v = confValue;      
+    } else if (confKey == 3) {
+      conf.dig_int[0] = confValue;      
     } else if (confKey == 4) {
-      conf.inp_en[0] = confValue;      
+      conf.dig_int[1] = confValue;      
     } else if (confKey == 5) {
-      conf.inp_en[1] = confValue;      
+      conf.dig_int[2] = confValue;      
     } else if (confKey == 6) {
-      conf.val_alr_hi[0] = confValue;      
-    } else if (confKey == 7) {
-      conf.val_alr_hi[1] = confValue;      
-    } else if (confKey == 8) {
-      conf.val_alr_lo[0] = confValue;      
-    } else if (confKey == 9) {
-      conf.val_alr_lo[1] = confValue;
-    } else if (confKey == 10) {
-      conf.val_alr_hys[0] = confValue;
-    } else if (confKey == 11) {
-      conf.val_alr_hys[1] = confValue;
-    } else if (confKey == 12) {
-      conf.val_max[0] = confValue;
-    } else if (confKey == 13) {
-      conf.val_max[1] = confValue; 
-    } else if (confKey == 14) {
-      conf.val_min[0] = confValue;
-    } else if (confKey == 15) {
-      conf.val_min[1] = confValue; 
-    } else if (confKey == 16) {
-      conf.volt_max[0] = confValue;
-    } else if (confKey == 17) {
-      conf.volt_max[1] = confValue; 
-    } else if (confKey == 18) {
-      conf.volt_min[0] = confValue;
-    } else if (confKey == 19) {
-      conf.volt_min[1] = confValue; 
+      conf.dig_int[3] = confValue;     
     }
     EEPROM.put(0, conf);
     resetMe();  
@@ -545,6 +344,9 @@ String RakReadLine(const unsigned long wdtMs) {
 void resetMe() {
   wdt_enable(WDTO_15MS);
   while(true); 
+}
+void wakeUp() {
+  isAlarm = true;   
 }
 void flashLed() {
   digitalWrite(LED_PIN, LOW);
