@@ -16,9 +16,9 @@ const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
 const uint8_t VOUT_EN_PIN   = A3;  // PF4/ADC4
 const uint8_t ADS_CS_PIN    = A4;  // PF1/ADC1
 
-float mV[2], R[2], T[2];
+float mV[2], R[2], Val[2];
 const float rtd_coeff = 0.3851, rtd_r0 = 100, extRef = 2500, r_ext = 3000;
-bool isAlarm, isTempOverPrev[2], isBatLowPrev, isPowerUp;
+bool isAlarm, isValOverPrev[2], isBatLowPrev, isPowerUp;
 const uint8_t vrefEnDly = 1, batEnDly = 1, batSampDly = 1, batSampNum = 3;
 uint16_t minuteRead, minuteSend;
 const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
@@ -28,9 +28,9 @@ struct Conf {
   uint16_t send_t;
   float bat_lo_v;  
   uint8_t inp_en[2];
-  float t_hi[2];
-  float t_lo[2];
-  float t_hys[2];   
+  float val_alr_hi[2];
+  float val_alr_lo[2];
+  float val_alr_hys[2];   
 };
 
 Conf conf;
@@ -85,7 +85,7 @@ void uplink() {
   lpp.addDigitalInput(0, isBatLowPrev); 
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.inp_en[ch]) {
-      lpp.addTemperature(1, T[ch]);
+      lpp.addTemperature(ch + 1, Val[ch]);
     } 
   } 
   if (!isPowerUp) {
@@ -105,7 +105,7 @@ void readAll() {
       readMv(ch);
       calcR(ch);
       calcT(ch);
-      calcTempAlarm(ch); 
+      calcValAlarm(ch); 
     }
   }  
 }
@@ -123,17 +123,17 @@ void calcR(uint8_t ch) {
   R[ch] = ( mV[ch] * r_ext ) / ( extRef - mV[ch] );  
 }
 void calcT(uint8_t ch) {     
-  T[ch] = ( R[ch] - rtd_r0 ) / rtd_coeff;    
+  Val[ch] = ( R[ch] - rtd_r0 ) / rtd_coeff;    
 }
-void calcTempAlarm(uint8_t ch) {  
-  bool isTempOver; 
-  if ((T[ch] >= conf.t_hi[ch] + conf.t_hys[ch]) || (T[ch] <= conf.t_lo[ch] - conf.t_hys[ch])) {
-    isTempOver = true;    
-  } else if ((T[ch] <= conf.t_hi[ch] - conf.t_hys[ch]) || (T[ch] >= conf.t_lo[ch] + conf.t_hys[ch])) {
-    isTempOver = false;
+void calcValAlarm(uint8_t ch) {  
+  bool isValOver; 
+  if ((Val[ch] >= conf.val_alr_hi[ch] + conf.val_alr_hys[ch]) || (Val[ch] <= conf.val_alr_lo[ch] - conf.val_alr_hys[ch])) {
+    isValOver = true;    
+  } else if ((Val[ch] <= conf.val_alr_hi[ch] - conf.val_alr_hys[ch]) || (Val[ch] >= conf.val_alr_lo[ch] + conf.val_alr_hys[ch])) {
+    isValOver = false;
   }
-  if (isTempOver != isTempOverPrev[ch]) {
-    isTempOverPrev[ch] = isTempOver;
+  if (isValOver != isValOverPrev[ch]) {
+    isValOverPrev[ch] = isValOver;
     isAlarm = true;          
   }    
 } 
@@ -199,6 +199,7 @@ void loadConf() {
 void setAds() {
   ads1118.begin();
   //ads1118.setSampligRate(ads1118.RATE_64SPS);
+  ads1118.setFullScaleRange(ads1118.FSR_0256);
   ads1118.disablePullup(); 
 }
 void setUsb() {
@@ -261,65 +262,65 @@ void setUsb() {
             Serial.print(F("OK"));
             Serial.println(conf.inp_en[1]);
           }
-        } else if (str.startsWith(F("t_hi_1"))) {
+        } else if (str.startsWith(F("val_alr_hi_1"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("t_hi_1="), "");
-            conf.t_hi[0] = str.toFloat();
+            str.replace(F("val_alr_hi_1="), "");
+            conf.val_alr_hi[0] = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.t_hi[0]);
+            Serial.println(conf.val_alr_hi[0]);
           }
-        } else if (str.startsWith(F("t_hi_2"))) {
+        } else if (str.startsWith(F("val_alr_hi_2"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("t_hi_2="), "");
-            conf.t_hi[1] = str.toFloat();
+            str.replace(F("val_alr_hi_2="), "");
+            conf.val_alr_hi[1] = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.t_hi[1]);
+            Serial.println(conf.val_alr_hi[1]);
           } 
-        } else if (str.startsWith(F("t_lo_1"))) {
+        } else if (str.startsWith(F("val_alr_lo_1"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("t_lo_1="), "");
-            conf.t_lo[0] = str.toFloat();
+            str.replace(F("val_alr_lo_1="), "");
+            conf.val_alr_lo[0] = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.t_lo[0]);
+            Serial.println(conf.val_alr_lo[0]);
           }
-        } else if (str.startsWith(F("t_lo_2"))) {
+        } else if (str.startsWith(F("val_alr_lo_2"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("t_lo_2="), "");
-            conf.t_lo[1] = str.toFloat();
+            str.replace(F("val_alr_lo_2="), "");
+            conf.val_alr_lo[1] = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.t_lo[1]);
+            Serial.println(conf.val_alr_lo[1]);
           }
-        } else if (str.startsWith(F("t_hys_1"))) {
+        } else if (str.startsWith(F("val_alr_hys_1"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("t_hys_1="), "");
-            conf.t_hys[0] = str.toFloat();
+            str.replace(F("val_alr_hys_1="), "");
+            conf.val_alr_hys[0] = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.t_hys[0]);
+            Serial.println(conf.val_alr_hys[0]);
           } 
-        } else if (str.startsWith(F("t_hys_2"))) {
+        } else if (str.startsWith(F("val_alr_hys_2"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("t_hys_2="), "");
-            conf.t_hys[1] = str.toFloat();
+            str.replace(F("val_alr_hys_2="), "");
+            conf.val_alr_hys[1] = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.t_hys[1]);
+            Serial.println(conf.val_alr_hys[1]);
           }        
         }
         str = "";        
@@ -393,17 +394,17 @@ void lppDownlinkDec(String str) {
     } else if (confKey == 5) {
       conf.inp_en[1] = confValue;      
     } else if (confKey == 6) {
-      conf.t_hi[0] = confValue;      
+      conf.val_alr_hi[0] = confValue;      
     } else if (confKey == 7) {
-      conf.t_hi[1] = confValue;      
+      conf.val_alr_hi[1] = confValue;      
     } else if (confKey == 8) {
-      conf.t_lo[0] = confValue;      
+      conf.val_alr_lo[0] = confValue;      
     } else if (confKey == 9) {
-      conf.t_lo[1] = confValue;
+      conf.val_alr_lo[1] = confValue;
     } else if (confKey == 10) {
-      conf.t_hys[0] = confValue;
+      conf.val_alr_hys[0] = confValue;
     } else if (confKey == 11) {
-      conf.t_hys[1] = confValue;                  
+      conf.val_alr_hys[1] = confValue;                  
     }
     EEPROM.put(0, conf);
     resetMe();  

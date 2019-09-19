@@ -16,12 +16,12 @@ const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
 const uint8_t VOUT_EN_PIN   = A3;  // PF4/ADC4
 const uint8_t ADS_CS_PIN    = A4;  // PF1/ADC1
 
-float mV[2], T[2];
+float mV[2], Val[2];
 const float rangeMv1 = 0, rangeMv2 = 20.644;
 const float k1[] PROGMEM = {0.0000000E+0, 2.5173462E+1, -1.1662878E+0, -1.0833638E+0, -8.9773540E-1, -3.7342377E-1, -8.6632643E-2, -1.0450598E-2, -5.1920577E-4}; 
 const float k2[] PROGMEM = {0.0000000E+0, 2.5083550E+1, 7.8601060E-2, -2.5031310E-1, 8.3152700E-2, -1.2280340E-2, 9.8040360E-4, -4.4130300E-5, 1.0577340E-6, -1.0527550E-8};
 const float k3[] PROGMEM = {-1.3180580E+2, 4.8302220E+1, -1.6460310E+0, 5.4647310E-2, -9.6507150E-4, 8.8021930E-6, -3.1108100E-8};  
-bool isAlarm, isTempOverPrev[2], isBatLowPrev, isPowerUp;
+bool isAlarm, isValOverPrev[2], isBatLowPrev, isPowerUp;
 const uint8_t vrefEnDly = 1, batEnDly = 1, batSampDly = 1, batSampNum = 3;
 uint16_t minuteRead, minuteSend;
 const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
@@ -31,9 +31,9 @@ struct Conf {
   uint16_t send_t;
   float bat_lo_v;  
   uint8_t inp_en[2];
-  float t_hi[2];
-  float t_lo[2];
-  float t_hys[2];   
+  float val_alr_hi[2];
+  float val_alr_lo[2];
+  float val_alr_hys[2];   
 };
 
 Conf conf;
@@ -88,7 +88,7 @@ void uplink() {
   lpp.addDigitalInput(0, isBatLowPrev); 
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.inp_en[ch]) {
-      lpp.addTemperature(1, T[ch]);
+      lpp.addTemperature(ch + 1, Val[ch]);
     } 
   } 
   if (!isPowerUp) {
@@ -107,7 +107,7 @@ void readAll() {
     if (conf.inp_en[ch]) {
       readMv(ch);
       calcT(ch);
-      calcTempAlarm(ch); 
+      calcValAlarm(ch); 
     }
   }  
 }
@@ -123,28 +123,28 @@ void readMv(uint8_t ch) {
 }
 void calcT(uint8_t ch) {     
   if (mV[ch] < rangeMv1) {
-    T[ch] = pgm_read_float(&k1[0]) + mV[ch]*(pgm_read_float(&k1[1]) + mV[ch]*(pgm_read_float(&k1[2]) + mV[ch]*(pgm_read_float(&k1[3])
+    Val[ch] = pgm_read_float(&k1[0]) + mV[ch]*(pgm_read_float(&k1[1]) + mV[ch]*(pgm_read_float(&k1[2]) + mV[ch]*(pgm_read_float(&k1[3])
       + mV[ch]*(pgm_read_float(&k1[4]) + mV[ch]*(pgm_read_float(&k1[5]) + mV[ch]*(pgm_read_float(&k1[6]) + mV[ch]*(pgm_read_float(&k1[7])
       + mV[ch]*(pgm_read_float(&k1[8])))))))));      
   } else if (mV[ch] > rangeMv2) {
-    T[ch] = pgm_read_float(&k3[0]) + mV[ch]*(pgm_read_float(&k3[1]) + mV[ch]*(pgm_read_float(&k3[2]) + mV[ch]*(pgm_read_float(&k3[3])
+    Val[ch] = pgm_read_float(&k3[0]) + mV[ch]*(pgm_read_float(&k3[1]) + mV[ch]*(pgm_read_float(&k3[2]) + mV[ch]*(pgm_read_float(&k3[3])
       + mV[ch]*(pgm_read_float(&k3[4]) + mV[ch]*(pgm_read_float(&k3[5]) + mV[ch]*(pgm_read_float(&k3[6])))))));
   } else {
-    T[ch] = pgm_read_float(&k2[0]) + mV[ch]*(pgm_read_float(&k2[1]) + mV[ch]*(pgm_read_float(&k2[2]) + mV[ch]*(pgm_read_float(&k2[3])
+    Val[ch] = pgm_read_float(&k2[0]) + mV[ch]*(pgm_read_float(&k2[1]) + mV[ch]*(pgm_read_float(&k2[2]) + mV[ch]*(pgm_read_float(&k2[3])
       + mV[ch]*(pgm_read_float(&k2[4]) + mV[ch]*(pgm_read_float(&k2[5]) + mV[ch]*(pgm_read_float(&k2[6]) + mV[ch]*(pgm_read_float(&k2[7])
       + mV[ch]*(pgm_read_float(&k2[8]) + mV[ch]*(pgm_read_float(&k2[9]))))))))));
   } 
-  T[ch] = T[ch] + ads1118.getTemperature();    
+  Val[ch] = Val[ch] + ads1118.getTemperature();    
 }
-void calcTempAlarm(uint8_t ch) {  
-  bool isTempOver; 
-  if ((T[ch] >= conf.t_hi[ch] + conf.t_hys[ch]) || (T[ch] <= conf.t_lo[ch] - conf.t_hys[ch])) {
-    isTempOver = true;    
-  } else if ((T[ch] <= conf.t_hi[ch] - conf.t_hys[ch]) || (T[ch] >= conf.t_lo[ch] + conf.t_hys[ch])) {
-    isTempOver = false;
+void calcValAlarm(uint8_t ch) {  
+  bool isValOver; 
+  if ((Val[ch] >= conf.val_alr_hi[ch] + conf.val_alr_hys[ch]) || (Val[ch] <= conf.val_alr_lo[ch] - conf.val_alr_hys[ch])) {
+    isValOver = true;    
+  } else if ((Val[ch] <= conf.val_alr_hi[ch] - conf.val_alr_hys[ch]) || (Val[ch] >= conf.val_alr_lo[ch] + conf.val_alr_hys[ch])) {
+    isValOver = false;
   }
-  if (isTempOver != isTempOverPrev[ch]) {
-    isTempOverPrev[ch] = isTempOver;
+  if (isValOver != isValOverPrev[ch]) {
+    isValOverPrev[ch] = isValOver;
     isAlarm = true;          
   }    
 } 
@@ -210,6 +210,7 @@ void loadConf() {
 void setAds() {
   ads1118.begin();
   //ads1118.setSampligRate(ads1118.RATE_64SPS);
+  ads1118.setFullScaleRange(ads1118.FSR_0256);
   ads1118.disablePullup(); 
 }
 void setUsb() {
@@ -272,65 +273,65 @@ void setUsb() {
             Serial.print(F("OK"));
             Serial.println(conf.inp_en[1]);
           }
-        } else if (str.startsWith(F("t_hi_1"))) {
+        } else if (str.startsWith(F("val_alr_hi_1"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("t_hi_1="), "");
-            conf.t_hi[0] = str.toFloat();
+            str.replace(F("val_alr_hi_1="), "");
+            conf.val_alr_hi[0] = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.t_hi[0]);
+            Serial.println(conf.val_alr_hi[0]);
           }
-        } else if (str.startsWith(F("t_hi_2"))) {
+        } else if (str.startsWith(F("val_alr_hi_2"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("t_hi_2="), "");
-            conf.t_hi[1] = str.toFloat();
+            str.replace(F("val_alr_hi_2="), "");
+            conf.val_alr_hi[1] = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.t_hi[1]);
+            Serial.println(conf.val_alr_hi[1]);
           } 
-        } else if (str.startsWith(F("t_lo_1"))) {
+        } else if (str.startsWith(F("val_alr_lo_1"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("t_lo_1="), "");
-            conf.t_lo[0] = str.toFloat();
+            str.replace(F("val_alr_lo_1="), "");
+            conf.val_alr_lo[0] = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.t_lo[0]);
+            Serial.println(conf.val_alr_lo[0]);
           }
-        } else if (str.startsWith(F("t_lo_2"))) {
+        } else if (str.startsWith(F("val_alr_lo_2"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("t_lo_2="), "");
-            conf.t_lo[1] = str.toFloat();
+            str.replace(F("val_alr_lo_2="), "");
+            conf.val_alr_lo[1] = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.t_lo[1]);
+            Serial.println(conf.val_alr_lo[1]);
           }
-        } else if (str.startsWith(F("t_hys_1"))) {
+        } else if (str.startsWith(F("val_alr_hys_1"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("t_hys_1="), "");
-            conf.t_hys[0] = str.toFloat();
+            str.replace(F("val_alr_hys_1="), "");
+            conf.val_alr_hys[0] = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.t_hys[0]);
+            Serial.println(conf.val_alr_hys[0]);
           } 
-        } else if (str.startsWith(F("t_hys_2"))) {
+        } else if (str.startsWith(F("val_alr_hys_2"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("t_hys_2="), "");
-            conf.t_hys[1] = str.toFloat();
+            str.replace(F("val_alr_hys_2="), "");
+            conf.val_alr_hys[1] = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.t_hys[1]);
+            Serial.println(conf.val_alr_hys[1]);
           }        
         }
         str = "";        
@@ -404,17 +405,17 @@ void lppDownlinkDec(String str) {
     } else if (confKey == 5) {
       conf.inp_en[1] = confValue;      
     } else if (confKey == 6) {
-      conf.t_hi[0] = confValue;      
+      conf.val_alr_hi[0] = confValue;      
     } else if (confKey == 7) {
-      conf.t_hi[1] = confValue;      
+      conf.val_alr_hi[1] = confValue;      
     } else if (confKey == 8) {
-      conf.t_lo[0] = confValue;      
+      conf.val_alr_lo[0] = confValue;      
     } else if (confKey == 9) {
-      conf.t_lo[1] = confValue;
+      conf.val_alr_lo[1] = confValue;
     } else if (confKey == 10) {
-      conf.t_hys[0] = confValue;
+      conf.val_alr_hys[0] = confValue;
     } else if (confKey == 11) {
-      conf.t_hys[1] = confValue;                  
+      conf.val_alr_hys[1] = confValue;                  
     }
     EEPROM.put(0, conf);
     resetMe();  
