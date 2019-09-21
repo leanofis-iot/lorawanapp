@@ -15,8 +15,9 @@ const uint8_t LED_PIN       = 10;  // PB6/ADC13/PCINT6
 const uint8_t BAT_PIN       = A0;  // PF7/ADC7
 const uint8_t BAT_EN_PIN    = A1;  // PF6/ADC6
 
+float BatVolt, BatVoltPrev;
 volatile bool isAlarm;
-bool isBatLowPrev, isPowerUp;
+bool isPowerUp;
 const uint8_t batEnDly = 1, batSampDly = 1, batSampNum = 3;
 uint16_t minuteRead, minuteSend;
 const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
@@ -86,7 +87,7 @@ void uplink() {
   minuteSend = 0; 
   SHT31D result = sht.periodicFetchData(); 
   lpp.reset();
-  lpp.addDigitalInput(0, isBatLowPrev); 
+  lpp.addAnalogInput(0, BatVolt); 
   lpp.addTemperature(1, result.t);
   lpp.addRelativeHumidity(2, result.rh);
   if (!isPowerUp) {
@@ -100,9 +101,10 @@ void uplink() {
 void readAll() {
   wdt_enable(WDTO_8S);
   wdt_reset();
-  calcBatAlarm();  
+  readBatVolt();
+  calcBatAlarm(); 
 }
-void calcBatAlarm() {
+void readBatVolt() {
   power_adc_enable();  
   digitalWrite(BAT_EN_PIN, LOW);
   delay(batEnDly);
@@ -114,22 +116,24 @@ void calcBatAlarm() {
   } 
   digitalWrite(BAT_EN_PIN, HIGH); 
   power_adc_disable(); 
-  float batteryVolt = 0;
+  BatVolt = 0;
   for (ii = 0; ii < batSampNum; ii++) {
-    batteryVolt += samples[ii];
+    BatVolt += samples[ii];
   }
-  batteryVolt /= batSampNum;   
-  batteryVolt = ( batteryVolt / 1023 ) * 3.6;
-  bool isBatLow; 
-  if (batteryVolt <= conf.bat_lo_v) {
-    isBatLow = true;   
+  BatVolt /= batSampNum;   
+  BatVolt = ( BatVolt / 1023 ) * 3.6;  
+}
+void calcBatAlarm() {
+  if (BatVolt <= conf.bat_lo_v) {
+    if (BatVoltPrev > conf.bat_lo_v) {
+      isAlarm = true;
+    }
   } else {
-    isBatLow = false;
+    if (BatVoltPrev <= conf.bat_lo_v) {
+      isAlarm = true;
+    }
   }
-  if (isBatLow != isBatLowPrev) {
-    isBatLowPrev = isBatLow;
-    isAlarm = true;  
-  }  
+  BatVoltPrev = BatVolt;
 }
 void setPins() {  
   pinMode(SHT_ALR_PIN, INPUT);
@@ -165,10 +169,10 @@ void setSht() {
   sht.begin(0x44);
   sht.clearAll();
   sht.periodicStart(SHT3XD_REPEATABILITY_LOW, SHT3XD_FREQUENCY_1HZ);
-  sht.writeAlertHigh(conf.val_alr_hi[0] + conf.val_alr_hys[0], conf.val_alr_hi[0] - conf.val_alr_hys[0], 
-                    conf.val_alr_hi[1] + conf.val_alr_hys[1], conf.val_alr_hi[1] - conf.val_alr_hys[1]);
-  sht.writeAlertLow(conf.val_alr_lo[0] + conf.val_alr_hys[0], conf.val_alr_lo[0] - conf.val_alr_hys[0], 
-                    conf.val_alr_lo[1] + conf.val_alr_hys[1], conf.val_alr_lo[1] - conf.val_alr_hys[1]);
+  sht.writeAlertHigh(conf.val_alr_hi[0] + conf.val_alr_hi[0] * conf.val_alr_hys[0], conf.val_alr_hi[0] - conf.val_alr_hi[0] * conf.val_alr_hys[0], 
+                    conf.val_alr_hi[1] + conf.val_alr_hi[1] * conf.val_alr_hys[1], conf.val_alr_hi[1] - conf.val_alr_hi[1] * conf.val_alr_hys[1]);
+  sht.writeAlertLow(conf.val_alr_lo[0] + conf.val_alr_lo[0] * conf.val_alr_hys[0], conf.val_alr_lo[0] - conf.val_alr_lo[0] * conf.val_alr_hys[0], 
+                    conf.val_alr_lo[1] + conf.val_alr_lo[1] * conf.val_alr_hys[1], conf.val_alr_lo[1] - conf.val_alr_lo[1] * conf.val_alr_hys[1]);
 }
 void setUsb() {
   String str;

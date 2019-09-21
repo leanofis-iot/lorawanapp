@@ -16,9 +16,9 @@ const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
 const uint8_t VOUT_EN_PIN   = A3;  // PF4/ADC4
 const uint8_t ADS_CS_PIN    = A4;  // PF1/ADC1
 
-float mV[2], R[2], Val[2];
+float mV[2], R[2], Val[2], ValPrev[2], BatVolt, BatVoltPrev;
 const float rtd_coeff = 0.3851, rtd_r0 = 100, extRef = 2500, r_ext = 3000;
-bool isAlarm, isValOverPrev[2], isBatLowPrev, isPowerUp;
+bool isAlarm, isPowerUp;
 const uint8_t vrefEnDly = 1, batEnDly = 1, batSampDly = 1, batSampNum = 3;
 uint16_t minuteRead, minuteSend;
 const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
@@ -82,7 +82,7 @@ void uplink() {
   minuteRead = 0;
   minuteSend = 0;  
   lpp.reset();
-  lpp.addDigitalInput(0, isBatLowPrev); 
+  lpp.addAnalogInput(0, BatVolt);  
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.inp_en[ch]) {
       lpp.addTemperature(ch + 1, Val[ch]);
@@ -99,6 +99,7 @@ void uplink() {
 void readAll() {
   wdt_enable(WDTO_8S);
   wdt_reset();
+  readBatVolt();
   calcBatAlarm();
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.inp_en[ch]) {
@@ -125,19 +126,30 @@ void calcR(uint8_t ch) {
 void calcT(uint8_t ch) {     
   Val[ch] = ( R[ch] - rtd_r0 ) / rtd_coeff;    
 }
-void calcValAlarm(uint8_t ch) {  
-  bool isValOver; 
-  if ((Val[ch] >= conf.val_alr_hi[ch] + conf.val_alr_hys[ch]) || (Val[ch] <= conf.val_alr_lo[ch] - conf.val_alr_hys[ch])) {
-    isValOver = true;    
-  } else if ((Val[ch] <= conf.val_alr_hi[ch] - conf.val_alr_hys[ch]) || (Val[ch] >= conf.val_alr_lo[ch] + conf.val_alr_hys[ch])) {
-    isValOver = false;
+void calcValAlarm(uint8_t ch) {     
+  if (Val[ch] <= conf.val_alr_lo[ch] - conf.val_alr_lo[ch] * conf.val_alr_hys[ch]) {
+    if (ValPrev[ch] >= conf.val_alr_lo[ch] + conf.val_alr_lo[ch] * conf.val_alr_hys[ch]) {
+      isAlarm = true; 
+    }
   }
-  if (isValOver != isValOverPrev[ch]) {
-    isValOverPrev[ch] = isValOver;
-    isAlarm = true;          
-  }    
+  if (Val[ch] >= conf.val_alr_lo[ch] + conf.val_alr_lo[ch] * conf.val_alr_hys[ch]) {
+    if (ValPrev[ch] <= conf.val_alr_lo[ch] - conf.val_alr_lo[ch] * conf.val_alr_hys[ch]) {
+      isAlarm = true; 
+    }
+  }
+  if (Val[ch] >= conf.val_alr_hi[ch] + conf.val_alr_hi[ch] * conf.val_alr_hys[ch]) {
+    if (ValPrev[ch] <= conf.val_alr_hi[ch] - conf.val_alr_hi[ch] * conf.val_alr_hys[ch]) {
+      isAlarm = true; 
+    }
+  }
+  if (Val[ch] <= conf.val_alr_hi[ch] - conf.val_alr_hi[ch] * conf.val_alr_hys[ch]) {
+    if (ValPrev[ch] >= conf.val_alr_hi[ch] + conf.val_alr_hi[ch] * conf.val_alr_hys[ch]) {
+      isAlarm = true; 
+    }
+  }
+  ValPrev[ch] = Val[ch];  
 } 
-void calcBatAlarm() {
+void readBatVolt() {
   power_adc_enable();  
   digitalWrite(BAT_EN_PIN, LOW);
   delay(batEnDly);
@@ -149,22 +161,24 @@ void calcBatAlarm() {
   } 
   digitalWrite(BAT_EN_PIN, HIGH); 
   power_adc_disable(); 
-  float batteryVolt = 0;
+  BatVolt = 0;
   for (ii = 0; ii < batSampNum; ii++) {
-    batteryVolt += samples[ii];
+    BatVolt += samples[ii];
   }
-  batteryVolt /= batSampNum;   
-  batteryVolt = ( batteryVolt / 1023 ) * 3.6;
-  bool isBatLow; 
-  if (batteryVolt <= conf.bat_lo_v) {
-    isBatLow = true;   
+  BatVolt /= batSampNum;   
+  BatVolt = ( BatVolt / 1023 ) * 3.6;  
+}
+void calcBatAlarm() {
+  if (BatVolt <= conf.bat_lo_v) {
+    if (BatVoltPrev > conf.bat_lo_v) {
+      isAlarm = true;
+    }
   } else {
-    isBatLow = false;
+    if (BatVoltPrev <= conf.bat_lo_v) {
+      isAlarm = true;
+    }
   }
-  if (isBatLow != isBatLowPrev) {
-    isBatLowPrev = isBatLow;
-    isAlarm = true;  
-  }  
+  BatVoltPrev = BatVolt;
 }
 void setPins() {
   pinMode(RAK_RES_PIN, OUTPUT);

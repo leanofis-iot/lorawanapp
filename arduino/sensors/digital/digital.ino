@@ -14,8 +14,9 @@ const uint8_t BAT_EN_PIN    = A1;  // PF6/ADC6
 const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
 const uint8_t VOUT_EN_PIN   = A3;  // PF4/ADC4
 
+float BatVolt, BatVoltPrev;
 volatile bool isAlarm;
-bool isBatLowPrev, isPowerUp;
+bool isPowerUp;
 const uint8_t batEnDly = 1, batSampDly = 1, batSampNum = 3, digDebounce = 10;
 uint16_t minuteRead;
 const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
@@ -82,7 +83,7 @@ void uplink() {
   isAlarm = false; 
   minuteRead = 0;
   lpp.reset();
-  lpp.addDigitalInput(0, isBatLowPrev);  
+  lpp.addAnalogInput(0, BatVolt);  
   for (uint8_t ch = 0; ch < 4 ; ch++) {
     if (conf.dig_int[ch]) {
       lpp.addDigitalInput(ch + 1, digitalRead(DIG_PIN[ch]));
@@ -99,9 +100,10 @@ void uplink() {
 void readAll() {
   wdt_enable(WDTO_8S);
   wdt_reset();
+  readBatVolt();
   calcBatAlarm();  
 }
-void calcBatAlarm() {
+void readBatVolt() {
   power_adc_enable();  
   digitalWrite(BAT_EN_PIN, LOW);
   delay(batEnDly);
@@ -113,22 +115,24 @@ void calcBatAlarm() {
   } 
   digitalWrite(BAT_EN_PIN, HIGH); 
   power_adc_disable(); 
-  float batteryVolt = 0;
+  BatVolt = 0;
   for (ii = 0; ii < batSampNum; ii++) {
-    batteryVolt += samples[ii];
+    BatVolt += samples[ii];
   }
-  batteryVolt /= batSampNum;   
-  batteryVolt = ( batteryVolt / 1023 ) * 3.6;
-  bool isBatLow; 
-  if (batteryVolt <= conf.bat_lo_v) {
-    isBatLow = true;   
+  BatVolt /= batSampNum;   
+  BatVolt = ( BatVolt / 1023 ) * 3.6;  
+}
+void calcBatAlarm() {
+  if (BatVolt <= conf.bat_lo_v) {
+    if (BatVoltPrev > conf.bat_lo_v) {
+      isAlarm = true;
+    }
   } else {
-    isBatLow = false;
+    if (BatVoltPrev <= conf.bat_lo_v) {
+      isAlarm = true;
+    }
   }
-  if (isBatLow != isBatLowPrev) {
-    isBatLowPrev = isBatLow;
-    isAlarm = true;  
-  }  
+  BatVoltPrev = BatVolt;
 }
 void setPins() {  
   for (uint8_t ch = 0; ch < 4 ; ch++) {
