@@ -106,13 +106,13 @@ void readAll() {
   calcBatAlarm();
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.inp_en[ch]) {
-      readMv(ch);
+      readmV(ch);
       calcVal(ch);
       calcValAlarm(ch); 
     }
   }  
 }
-void readMv(uint8_t ch) {
+void readmV(uint8_t ch) {
   digitalWrite(VOUT_EN_PIN, LOW);
   delay(voutEnDly);
   if (ch == 0) {
@@ -120,11 +120,11 @@ void readMv(uint8_t ch) {
   } else if (ch == 1) {
     mV[1] = ads1118.getMilliVolts(ads1118.DIFF_2_3);
   } 
+  mV[ch] = mV[ch] * 10000 / 2048;
   digitalWrite(VOUT_EN_PIN, HIGH);  
 }
-void calcVal(uint8_t ch) { 
-  mV[ch] = mV[ch] * 10000 / 2048;
-  Val[ch] = (mV[ch] - conf.volt_min[ch] * 1000) * (conf.val_max[ch] - conf.val_min[ch]) / (conf.volt_max[ch] - conf.volt_min[ch]) + conf.val_min[ch] * 1000;  
+void calcVal(uint8_t ch) {  
+  Val[ch] = (mV[ch] / 1000 - conf.volt_min[ch]) * (conf.val_max[ch] - conf.val_min[ch]) / (conf.volt_max[ch] - conf.volt_min[ch]) + conf.val_min[ch];  
   //(x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;  
 }
 void calcValAlarm(uint8_t ch) {     
