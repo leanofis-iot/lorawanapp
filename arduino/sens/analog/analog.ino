@@ -19,7 +19,7 @@ const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
 const uint8_t VOUT_EN_PIN   = A3;  // PF4/ADC4
 const uint8_t ADS_CS_PIN    = A4;  // PF1/ADC1
 
-float mV[2], Val[2], InFact, ValPrev[2], BatVolt, BatVoltPrev;
+float In[2], Val[2], InFact, ValPrev[2], BatVolt, BatVoltPrev;
 bool isAlarm, isPowerUp;
 const uint8_t voutEnDly = 1, batEnDly = 1, batSampDly = 1, batSampNum = 3;
 const uint8_t andiff = 0, ansingle = 1, an5v = 0, an10v = 1, an420ma = 2;
@@ -29,10 +29,7 @@ const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
 struct Conf {
   uint16_t read_t;
   uint16_t send_t;
-  float bat_lo_v;  
-  uint8_t an_in_en[2];
-  uint8_t an_in_end;
-  uint8_t an_in_type;    
+  float bat_lo_v;       
   float alr_max[2];
   float alr_min[2];
   float alr_hys[2];  
@@ -40,6 +37,9 @@ struct Conf {
   float val_min[2]; 
   float in_max[2];
   float in_min[2];
+  uint8_t an_in_en[2];
+  uint8_t an_in_end;
+  uint8_t an_in_type;
 };
 
 Conf conf;
@@ -112,25 +112,30 @@ void readAll() {
   calcBatAlarm();
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.an_in_en[ch]) {
-      readmV(ch);
+      readIn(ch);
       calcVal(ch);
       calcValAlarm(ch); 
     }
   }  
 }
-void readmV(uint8_t ch) {
+void readIn(uint8_t ch) {
   digitalWrite(VOUT_EN_PIN, LOW);
   delay(voutEnDly);
   if (ch == 0) {
-    mV[0] = ads1118.getMilliVolts(ads1118.DIFF_0_1);
+    In[0] = ads1118.getMilliVolts(ads1118.DIFF_0_1);
   } else if (ch == 1) {
-    mV[1] = ads1118.getMilliVolts(ads1118.DIFF_2_3);
+    In[1] = ads1118.getMilliVolts(ads1118.DIFF_2_3);
   } 
-  mV[ch] = mV[ch] * InFact;
+  In[ch] = In[ch] * InFact;
+  if (conf.an_in_type == an420ma) {
+    In[ch] /= 500;  // mV / 500R = ma
+  } else {
+    In[ch] /= 1000; // mV / 1000 = volt
+  }
   digitalWrite(VOUT_EN_PIN, HIGH);  
 }
 void calcVal(uint8_t ch) {  
-  Val[ch] = (mV[ch] / 1000 - conf.in_min[ch]) * (conf.val_max[ch] - conf.val_min[ch]) / (conf.in_max[ch] - conf.in_min[ch]) + conf.val_min[ch];  
+  Val[ch] = (In[ch] - conf.in_min[ch]) * (conf.val_max[ch] - conf.val_min[ch]) / (conf.in_max[ch] - conf.in_min[ch]) + conf.val_min[ch];  
   //(x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;  
 }
 void calcValAlarm(uint8_t ch) {     
@@ -221,23 +226,23 @@ void setAds() {
   ads1118.begin();
   //ads1118.setSampligRate(ads1118.RATE_64SPS);  
   ads1118.disablePullup();
-  if (an_in_end == andiff) {
+  if (conf.an_in_end == andiff) {
     InFact = (10 + 10 + 2.2) / 2.2;
-    if (an_in_type == an5v) {
+    if (conf.an_in_type == an5v) {
       ads1118.setFullScaleRange(ads1118.FSR_0512);      
-    } else if (an_in_type == an10v) {
+    } else if (conf.an_in_type == an10v) {
       ads1118.setFullScaleRange(ads1118.FSR_1024);
-    } else if (an_in_type == an420ma) {
+    } else if (conf.an_in_type == an420ma) {
       ads1118.setFullScaleRange(ads1118.FSR_1024);
       InFact = InFact * (10 + 2.2 + 0.5) / (10 + 2.2);  
     }
-  } else if (an_in_end == ansingle) {
+  } else if (conf.an_in_end == ansingle) {
     InFact = (10 + 2.2) / 2.2;
-    if (an_in_type == an5v) {
+    if (conf.an_in_type == an5v) {
       ads1118.setFullScaleRange(ads1118.FSR_1024);
-    } else if (an_in_type == an10v) {
+    } else if (conf.an_in_type == an10v) {
       ads1118.setFullScaleRange(ads1118.FSR_2048);    
-    } else if (an_in_type == an420ma) {
+    } else if (conf.an_in_type == an420ma) {
       ads1118.setFullScaleRange(ads1118.FSR_2048);
       InFact = InFact * (10 + 10 + 2.2 + 0.5) / (10 + 10 + 2.2);  
     }
@@ -283,26 +288,6 @@ void setUsb() {
             Serial.print(F("OK"));
             Serial.println(conf.bat_lo_v);
           }          
-        } else if (str.startsWith(F("an_in_en_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("an_in_en_1="), "");
-            conf.an_in_en[0] = str.toInt();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.an_in_en[0]);
-          } 
-        } else if (str.startsWith(F("an_in_en_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("an_in_en_2="), "");
-            conf.an_in_en[1] = str.toInt();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.an_in_en[1]);
-          }
         } else if (str.startsWith(F("alr_max_1"))) {
           if (str.indexOf(F("=")) >= 0) {
             str.replace(F("alr_max_1="), "");
@@ -442,7 +427,47 @@ void setUsb() {
           } else {
             Serial.print(F("OK"));
             Serial.println(conf.in_min[1]);
-          }          
+          }
+        } else if (str.startsWith(F("an_in_en_1"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("an_in_en_1="), "");
+            conf.an_in_en[0] = str.toInt();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.an_in_en[0]);
+          } 
+        } else if (str.startsWith(F("an_in_en_2"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("an_in_en_2="), "");
+            conf.an_in_en[1] = str.toInt();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.an_in_en[1]);
+          } 
+        } else if (str.startsWith(F("an_in_end"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("an_in_end="), "");
+            conf.an_in_end = str.toInt();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.an_in_end);
+          } 
+        } else if (str.startsWith(F("an_in_type"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("an_in_type="), "");
+            conf.an_in_type = str.toInt();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.an_in_type);
+          }                           
         }
         str = "";        
       }      
@@ -509,39 +534,43 @@ void lppDownlinkDec(String str) {
     } else if (confKey == 2) {
       conf.send_t = confValue;       
     } else if (confKey == 3) {
-      conf.bat_lo_v = confValue;      
+      conf.bat_lo_v = confValue;          
     } else if (confKey == 4) {
-      conf.an_in_en[0] = confValue;      
-    } else if (confKey == 5) {
-      conf.an_in_en[1] = confValue;      
-    } else if (confKey == 6) {
       conf.alr_max[0] = confValue;      
-    } else if (confKey == 7) {
+    } else if (confKey == 5) {
       conf.alr_max[1] = confValue;      
-    } else if (confKey == 8) {
+    } else if (confKey == 6) {
       conf.alr_min[0] = confValue;      
-    } else if (confKey == 9) {
+    } else if (confKey == 7) {
       conf.alr_min[1] = confValue;
-    } else if (confKey == 10) {
+    } else if (confKey == 8) {
       conf.alr_hys[0] = confValue;
-    } else if (confKey == 11) {
+    } else if (confKey == 9) {
       conf.alr_hys[1] = confValue;
-    } else if (confKey == 12) {
+    } else if (confKey == 10) {
       conf.val_max[0] = confValue;
-    } else if (confKey == 13) {
+    } else if (confKey == 11) {
       conf.val_max[1] = confValue; 
-    } else if (confKey == 14) {
+    } else if (confKey == 12) {
       conf.val_min[0] = confValue;
-    } else if (confKey == 15) {
+    } else if (confKey == 13) {
       conf.val_min[1] = confValue; 
-    } else if (confKey == 16) {
+    } else if (confKey == 14) {
       conf.in_max[0] = confValue;
-    } else if (confKey == 17) {
+    } else if (confKey == 15) {
       conf.in_max[1] = confValue; 
-    } else if (confKey == 18) {
+    } else if (confKey == 16) {
       conf.in_min[0] = confValue;
+    } else if (confKey == 17) {
+      conf.in_min[1] = confValue;
+    } else if (confKey == 18) {
+      conf.an_in_en[0] = confValue;      
     } else if (confKey == 19) {
-      conf.in_min[1] = confValue; 
+      conf.an_in_en[1] = confValue;
+    } else if (confKey == 20) {
+      conf.an_in_end = confValue;      
+    } else if (confKey == 21) {
+      conf.an_in_type = confValue;  
     }
     EEPROM.put(0, conf);
     resetMe();  
