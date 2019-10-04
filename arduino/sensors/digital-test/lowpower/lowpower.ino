@@ -45,6 +45,9 @@ void loop() {
     minuteRead = 0;
     minuteSend = 0;
     Serial.println("send");
+    //wdt_enable(WDTO_15MS);
+    //wdt_reset();
+    //while(true);
   }    
 }
 void sleepAndWake() {  
