@@ -9,8 +9,8 @@
 //#include <stdlib.h>
 
 const uint8_t DIG_PIN[2]    = {3, 2}; // PD0/SCL/INT0, PD1/SDA/INT1
-const uint8_t SHT_ALR_PIN   = 0;  // PD2/RXD1/INT2
-const uint8_t SHT_RES_PIN   = 1;  // PD3/TXD1/INT3
+//const uint8_t SHT_ALR_PIN   = 0;  // PD2/RXD1/INT2
+//const uint8_t SHT_RES_PIN   = 1;  // PD3/TXD1/INT3
 const uint8_t RAK_RES_PIN   = 4;   // PD4/ADC8
 const uint8_t LED_PIN       = 10;  // PB6/ADC13/PCINT6
 const uint8_t BAT_PIN       = A0;  // PF7/ADC7
@@ -20,9 +20,10 @@ const uint8_t VOUT_EN_PIN   = A3;  // PF4/ADC4
 const uint8_t ADS_CS_PIN    = A4;  // PF1/ADC1
 
 float In[2], Val[2], InFact, ValPrev[2], BatVolt, BatVoltPrev;
-bool isAlarm, isPowerUp;
-const uint8_t voutEnDly = 1, batEnDly = 1, batSampDly = 1, batSampNum = 3;
-const uint8_t andiff = 0, ansingle = 1, an5v = 0, an10v = 1, an420ma = 2;
+volatile bool isAlarm;
+bool isPowerUp;
+const uint8_t voutEnDly = 1, digDly = 10, batEnDly = 1, batSampDly = 1, batSampNum = 3;
+const uint8_t andiff = 1, ansingle = 2, an5v = 1, an10v = 2, an420ma = 3;
 uint16_t minuteRead, minuteSend;
 const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
 
@@ -37,9 +38,10 @@ struct Conf {
   float val_min[2]; 
   float in_max[2];
   float in_min[2];
-  uint8_t an_in_en[2];
-  uint8_t an_in_end;
-  uint8_t an_in_type;
+  uint8_t an_en[2];
+  uint8_t an_end;
+  uint8_t an_type;
+  uint8_t dig_type[2];
 };
 
 Conf conf;
@@ -68,7 +70,11 @@ void setup() {
 }
 void loop() {  
   for (uint8_t ii = 0; ii < 8 ; ii++) {   
-    sleepAndWake();             
+    sleepAndWake();
+    if (isAlarm) {
+      delay(digDly);       
+      uplink();      
+    }              
   }    
   minuteRead++;
   minuteSend++;  
@@ -84,7 +90,17 @@ void loop() {
   }    
 }
 void sleepAndWake() {  
+  for (uint8_t ch = 0; ch < 2 ; ch++) {
+    if (conf.dig_type[ch]) {
+      attachInterrupt(digitalPinToInterrupt(DIG_PIN[ch]), wakeUp, conf.dig_type[ch]);    
+    }    
+  }    
   LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF     
+  for (uint8_t ch = 0; ch < 2 ; ch++) {
+    if (conf.dig_type[ch]) {
+      detachInterrupt(digitalPinToInterrupt(DIG_PIN[ch])); 
+    }    
+  }       
 }
 void uplink() {
   isAlarm = false;   
@@ -93,8 +109,13 @@ void uplink() {
   lpp.reset();
   lpp.addAnalogInput(0, BatVolt); 
   for (uint8_t ch = 0; ch < 2 ; ch++) {
-    if (conf.an_in_en[ch]) {
+    if (conf.an_en[ch]) {
       lpp.addAnalogInput(ch + 1, Val[ch]);
+    } 
+  } 
+  for (uint8_t ch = 0; ch < 2 ; ch++) {
+    if (conf.dig_type[ch]) {
+      lpp.addDigitalInput(ch + 11, digitalRead(DIG_PIN[ch]));
     } 
   } 
   if (!isPowerUp) {
@@ -111,7 +132,7 @@ void readAll() {
   readBatVolt();
   calcBatAlarm();
   for (uint8_t ch = 0; ch < 2 ; ch++) {
-    if (conf.an_in_en[ch]) {
+    if (conf.an_en[ch]) {
       readIn(ch);
       calcVal(ch);
       calcValAlarm(ch); 
@@ -127,7 +148,7 @@ void readIn(uint8_t ch) {
     In[1] = ads1118.getMilliVolts(ads1118.DIFF_2_3);
   } 
   In[ch] = In[ch] * InFact;
-  if (conf.an_in_type == an420ma) {
+  if (conf.an_type == an420ma) {
     In[ch] /= 500;  // mV / 500R = ma
   } else {
     In[ch] /= 1000; // mV / 1000 = volt
@@ -193,6 +214,9 @@ void calcBatAlarm() {
   BatVoltPrev = BatVolt;
 }
 void setPins() {
+  for (uint8_t ch = 0; ch < 2 ; ch++) {
+    pinMode(DIG_PIN[ch], INPUT);
+  }  
   pinMode(RAK_RES_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);  
   pinMode(BAT_PIN, INPUT);
@@ -226,23 +250,23 @@ void setAds() {
   ads1118.begin();
   //ads1118.setSampligRate(ads1118.RATE_64SPS);  
   ads1118.disablePullup();
-  if (conf.an_in_end == andiff) {
+  if (conf.an_end == andiff) {
     InFact = (10 + 10 + 2.2) / 2.2;
-    if (conf.an_in_type == an5v) {
+    if (conf.an_type == an5v) {
       ads1118.setFullScaleRange(ads1118.FSR_0512);      
-    } else if (conf.an_in_type == an10v) {
+    } else if (conf.an_type == an10v) {
       ads1118.setFullScaleRange(ads1118.FSR_1024);
-    } else if (conf.an_in_type == an420ma) {
+    } else if (conf.an_type == an420ma) {
       ads1118.setFullScaleRange(ads1118.FSR_1024);
       InFact = InFact * (10 + 2.2 + 0.5) / (10 + 2.2);  
     }
-  } else if (conf.an_in_end == ansingle) {
+  } else if (conf.an_end == ansingle) {
     InFact = (10 + 2.2) / 2.2;
-    if (conf.an_in_type == an5v) {
+    if (conf.an_type == an5v) {
       ads1118.setFullScaleRange(ads1118.FSR_1024);
-    } else if (conf.an_in_type == an10v) {
+    } else if (conf.an_type == an10v) {
       ads1118.setFullScaleRange(ads1118.FSR_2048);    
-    } else if (conf.an_in_type == an420ma) {
+    } else if (conf.an_type == an420ma) {
       ads1118.setFullScaleRange(ads1118.FSR_2048);
       InFact = InFact * (10 + 10 + 2.2 + 0.5) / (10 + 10 + 2.2);  
     }
@@ -428,46 +452,66 @@ void setUsb() {
             Serial.print(F("OK"));
             Serial.println(conf.in_min[1]);
           }
-        } else if (str.startsWith(F("an_in_en_1"))) {
+        } else if (str.startsWith(F("an_en_1"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("an_in_en_1="), "");
-            conf.an_in_en[0] = str.toInt();
+            str.replace(F("an_en_1="), "");
+            conf.an_en[0] = str.toInt();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.an_in_en[0]);
+            Serial.println(conf.an_en[0]);
           } 
-        } else if (str.startsWith(F("an_in_en_2"))) {
+        } else if (str.startsWith(F("an_en_2"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("an_in_en_2="), "");
-            conf.an_in_en[1] = str.toInt();
+            str.replace(F("an_en_2="), "");
+            conf.an_en[1] = str.toInt();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.an_in_en[1]);
+            Serial.println(conf.an_en[1]);
           } 
-        } else if (str.startsWith(F("an_in_end"))) {
+        } else if (str.startsWith(F("an_end"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("an_in_end="), "");
-            conf.an_in_end = str.toInt();
+            str.replace(F("an_end="), "");
+            conf.an_end = str.toInt();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.an_in_end);
+            Serial.println(conf.an_end);
           } 
-        } else if (str.startsWith(F("an_in_type"))) {
+        } else if (str.startsWith(F("an_type"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("an_in_type="), "");
-            conf.an_in_type = str.toInt();
+            str.replace(F("an_type="), "");
+            conf.an_type = str.toInt();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.an_in_type);
-          }                           
+            Serial.println(conf.an_type);
+          }  
+        } else if (str.startsWith(F("dig_type_1"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("dig_type_1="), "");
+            conf.dig_type[0] = str.toInt();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.dig_type[0]);
+          }                  
+        } else if (str.startsWith(F("dig_type_2"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("dig_type_2="), "");
+            conf.dig_type[1] = str.toInt();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.dig_type[1]);
+          }                                           
         }
         str = "";        
       }      
@@ -564,13 +608,17 @@ void lppDownlinkDec(String str) {
     } else if (confKey == 17) {
       conf.in_min[1] = confValue;
     } else if (confKey == 18) {
-      conf.an_in_en[0] = confValue;      
+      conf.an_en[0] = confValue;      
     } else if (confKey == 19) {
-      conf.an_in_en[1] = confValue;
+      conf.an_en[1] = confValue;
     } else if (confKey == 20) {
-      conf.an_in_end = confValue;      
+      conf.an_end = confValue;      
     } else if (confKey == 21) {
-      conf.an_in_type = confValue;  
+      conf.an_type = confValue;
+    } else if (confKey == 22) {
+      conf.dig_type[0] = confValue;      
+    } else if (confKey == 23) {
+      conf.dig_type[1] = confValue;  
     }
     EEPROM.put(0, conf);
     resetMe();  
@@ -614,6 +662,9 @@ String RakReadLine(const unsigned long wdtMs) {
 void resetMe() {
   wdt_enable(WDTO_15MS);
   while(true); 
+}
+void wakeUp() {
+  isAlarm = true;   
 }
 void flashLed() {
   digitalWrite(LED_PIN, LOW);
