@@ -11,9 +11,8 @@ struct Conf {
   const float val_min[2] = {0, 0}; 
   const float in_max[2] = {5, 5};
   const float in_min[2] = {0, 0};
-  const uint8_t an_en[2] = {1, 1};
-  const uint8_t an_end = 2;
-  const uint8_t an_type = 1;
+  const uint8_t an_type[2] = {1, 1};
+  const uint8_t an_end[2] = {1, 1};  
   const uint8_t dig_type[2] = {1, 1};
 };
 

@@ -22,7 +22,7 @@ const uint8_t ADS_CS_PIN    = A4;  // PF1/ADC1
 float In[2], Val[2], InFact, ValPrev[2], BatVolt, BatVoltPrev;
 volatile bool isAlarm;
 bool isPowerUp;
-const uint8_t voutEnDly = 1, digDly = 10, batEnDly = 1, batSampDly = 1, batSampNum = 3;
+const uint8_t digDly = 10, batEnDly = 1, batSampDly = 1, batSampNum = 3;
 const uint8_t andiff = 1, ansingle = 2, an5v = 1, an10v = 2, an420ma = 3;
 uint16_t minuteRead, minuteSend;
 const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
@@ -41,6 +41,7 @@ struct Conf {
   uint8_t an_type[2];
   uint8_t an_end[2];  
   uint8_t dig_type[2];
+  uint16_t vout_t;
 };
 
 Conf conf;
@@ -140,8 +141,10 @@ void readAll() {
   }  
 }
 void readIn(uint8_t ch) {
-  digitalWrite(VOUT_EN_PIN, LOW);
-  delay(voutEnDly);
+  if (conf.vout_t) {
+    digitalWrite(VOUT_EN_PIN, LOW);
+    delay(conf.vout_t); 
+  }  
   if (ch == 0) {
     In[0] = ads1118.getMilliVolts(ads1118.DIFF_0_1);
   } else if (ch == 1) {
