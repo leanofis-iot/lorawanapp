@@ -4,11 +4,9 @@ struct Conf {
   const uint16_t read_t = 1;
   const uint16_t send_t = 5;
   const float bat_lo_v = 3.1;       
-  const float alr_max[2] = {40, 40};
-  const float alr_min[2] = {20, 20};
-  const float alr_hys[2] = {0.01, 0.01};  
-  const uint8_t an_type[2] = {1, 1};
-  const uint8_t dig_type[2] = {1, 1};  
+  const float alr_max[2] = {40, 90};
+  const float alr_min[2] = {20, 10};
+  const float alr_hys[2] = {0.01, 0.01};    
 };
 
 Conf conf;
