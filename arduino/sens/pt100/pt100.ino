@@ -19,12 +19,11 @@ const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
 const uint8_t VOUT_EN_PIN   = A3;  // PF4/ADC4
 const uint8_t ADS_CS_PIN    = A4;  // PF1/ADC1
 
-float In[2], R[2], Val[2], ValPrev[2], BatVolt, BatVoltPrev;
+float In, R, Val[2], ValPrev[2], BatVolt, BatVoltPrev;
 const float rtd_coeff = 0.3851, rtd_r0 = 100, extRef = 2.5, r_ext = 2400;
 volatile bool isAlarm;
 bool isPowerUp;
 const uint8_t vrefEnDly = 1, digDly = 10, batEnDly = 1, batSampDly = 1, batSampNum = 3;
-const uint8_t andiff = 1, ansingle = 2, an5v = 1, an10v = 2, an420ma = 3;
 uint16_t minuteRead, minuteSend;
 const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
 
@@ -87,13 +86,13 @@ void loop() {
 void sleepAndWake() {  
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.dig_type[ch]) {
-      attachInterrupt(digitalPinToInterrupt(DIG_PIN[ch]), wakeUp, conf.dig_type[ch]);    
+      attachInterrupt(digitalPinToInterrupt(DIG_PIN[3 - ch]), wakeUp, conf.dig_type[ch]);    
     }    
   }    
   LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF     
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.dig_type[ch]) {
-      detachInterrupt(digitalPinToInterrupt(DIG_PIN[ch])); 
+      detachInterrupt(digitalPinToInterrupt(DIG_PIN[3 - ch])); 
     }    
   }       
 }
@@ -110,7 +109,7 @@ void uplink() {
   } 
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.dig_type[ch]) {
-      lpp.addDigitalInput(ch + 11, digitalRead(DIG_PIN[ch]));
+      lpp.addDigitalInput(ch + 11, digitalRead(DIG_PIN[3 - ch]));
     } 
   } 
   if (!isPowerUp) {
@@ -129,25 +128,25 @@ void readAll() {
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.an_type[ch]) {
       adjAds(ch);
-      readIn(ch);
-      calcR(ch);
+      readIn();
+      calcR();
       calcVal(ch);
       calcValAlarm(ch); 
     }
   }  
 }
-void readIn(uint8_t ch) {
+void readIn() {
   digitalWrite(VREF_EN_PIN, LOW);
   delay(vrefEnDly);  
-    In[0] = ads1118.getMilliVolts();  
+  In = ads1118.getMilliVolts();  
   digitalWrite(VREF_EN_PIN, HIGH); 
-  In[ch] /= 1000; // mV / 1000 = volt 
+  In /= 1000; // mV / 1000 = volt 
 }
-void calcR(uint8_t ch) {
-  R[ch] = (In[ch] * r_ext) / (extRef - In[ch]);  
+void calcR() {
+  R = (In * r_ext) / (extRef - In);  
 }
 void calcVal(uint8_t ch) {     
-  Val[ch] = (R[ch] - rtd_r0) / rtd_coeff;    
+  Val[ch] = (R - rtd_r0) / rtd_coeff;    
 }
 void calcValAlarm(uint8_t ch) {     
   if (Val[ch] <= conf.alr_min[ch] - conf.alr_min[ch] * conf.alr_hys[ch]) {
@@ -205,7 +204,7 @@ void calcBatAlarm() {
 }
 void setPins() {
   for (uint8_t ch = 0; ch < 2 ; ch++) {
-    pinMode(DIG_PIN[ch], INPUT);
+    pinMode(DIG_PIN[3 - ch], INPUT);
   }  
   pinMode(RAK_RES_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);  
