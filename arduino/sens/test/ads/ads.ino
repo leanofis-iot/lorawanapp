@@ -1,6 +1,5 @@
 #include <avr/wdt.h>
 #include <avr/power.h>
-#include <EEPROM.h>
 #include "ADS1118.h"
 #include <SPI.h>
 //#include <stdlib.h>
@@ -22,17 +21,17 @@ const uint8_t batEnDly = 1, batSampDly = 1, batSampNum = 3;
 const uint8_t andiff = 1, ansingle = 2, an5v = 1, an10v = 2, an420ma = 3;
 
 struct Conf {
-  float bat_lo_v;       
-  float alr_max[2];
-  float alr_min[2];
-  float alr_hys[2];  
-  float val_max[2];
-  float val_min[2]; 
-  float in_max[2];
-  float in_min[2];
-  uint8_t an_type[2];
-  uint8_t an_end[2];  
-  uint16_t vout_dly;
+  float bat_lo_v = 3.1;       
+  float alr_max[2] = {70, 70};
+  float alr_min[2] = {10, 10};
+  float alr_hys[2] = {0.01, 0.01};  
+  float val_max[2] = {100, 100};
+  float val_min[2] = {0, 0}; 
+  float in_max[2] = {5, 5};
+  float in_min[2] = {0, 0};
+  uint8_t an_type[2] = {1, 1};
+  uint8_t an_end[2] = {2, 2};  
+  uint16_t vout_dly = 2;
 };
 
 Conf conf;
@@ -40,15 +39,10 @@ ADS1118 ads1118(ADS_CS_PIN);
 
 void setup() {
   setPins();  
-  analogReference(INTERNAL);
-  loadConf();
+  analogReference(INTERNAL);  
   Serial.begin(115200);
   while (!Serial);
-  flashLed3();
-  delay(5000);
-  if (USBSTA >> VBUS & 1) {
-    setUsb();
-  } 
+  flashLed3();  
   setAds();   
 }
 void loop() { 
@@ -164,9 +158,6 @@ void setPins() {
   digitalWrite(VOUT_EN_PIN, LOW);
   digitalWrite(ADS_CS_PIN, HIGH);
 }
-void loadConf() {
-  EEPROM.get(0, conf);  
-}  
 void setAds() {
   ads1118.begin();
   //ads1118.setSampligRate(ads1118.RATE_64SPS);  
@@ -204,210 +195,6 @@ void adjAds(uint8_t ch) {
       InFact = InFact * (10 + 10 + 2.2 + 0.47) / (10 + 10 + 2.2);  
     }
   }  
-}
-void setUsb() {
-  String str;
-  while (true) {   
-    if (Serial.available()) {
-      const char chrUsb = (char)Serial.read();
-      str += chrUsb;
-      if (chrUsb == '\n') {
-        str.trim();       
-        if (str.startsWith(F("bat_lo_v"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("bat_lo_v="), "");
-            conf.bat_lo_v = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.bat_lo_v);
-          }          
-        } else if (str.startsWith(F("alr_max_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("alr_max_1="), "");
-            conf.alr_max[0] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.alr_max[0]);
-          }
-        } else if (str.startsWith(F("alr_max_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("alr_max_2="), "");
-            conf.alr_max[1] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.alr_max[1]);
-          } 
-        } else if (str.startsWith(F("alr_min_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("alr_min_1="), "");
-            conf.alr_min[0] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.alr_min[0]);
-          }
-        } else if (str.startsWith(F("alr_min_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("alr_min_2="), "");
-            conf.alr_min[1] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.alr_min[1]);
-          }
-        } else if (str.startsWith(F("alr_hys_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("alr_hys_1="), "");
-            conf.alr_hys[0] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.alr_hys[0]);
-          } 
-        } else if (str.startsWith(F("alr_hys_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("alr_hys_2="), "");
-            conf.alr_hys[1] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.alr_hys[1]);
-          }        
-        } else if (str.startsWith(F("val_max_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("val_max_1="), "");
-            conf.val_max[0] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.val_max[0]);
-          } 
-        } else if (str.startsWith(F("val_max_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("val_max_2="), "");
-            conf.val_max[1] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.val_max[1]);
-          } 
-        } else if (str.startsWith(F("val_min_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("val_min_1="), "");
-            conf.val_min[0] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.val_min[0]);
-          } 
-        } else if (str.startsWith(F("val_min_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("val_min_2="), "");
-            conf.val_min[1] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.val_min[1]);
-          }
-        } else if (str.startsWith(F("in_max_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("in_max_1="), "");
-            conf.in_max[0] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.in_max[0]);
-          } 
-        } else if (str.startsWith(F("in_max_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("in_max_2="), "");
-            conf.in_max[1] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.in_max[1]);
-          }
-        } else if (str.startsWith(F("in_min_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("in_min_1="), "");
-            conf.in_min[0] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.in_min[0]);
-          } 
-        } else if (str.startsWith(F("in_min_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("in_min_2="), "");
-            conf.in_min[1] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.in_min[1]);
-          } 
-        } else if (str.startsWith(F("an_type_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("an_type_1="), "");
-            conf.an_type[0] = str.toInt();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.an_type[0]);
-          }   
-        } else if (str.startsWith(F("an_type_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("an_type_2="), "");
-            conf.an_type[1] = str.toInt();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.an_type[1]);
-          }               
-        } else if (str.startsWith(F("an_end_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("an_end_1="), "");
-            conf.an_end[0] = str.toInt();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.an_end[0]);
-          } 
-        } else if (str.startsWith(F("an_end_2"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("an_end_2="), "");
-            conf.an_end[1] = str.toInt();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.an_end[1]);
-          }                                    
-        }
-        str = "";        
-      }      
-    }       
-  }    
 }
 void flashLed() {
   digitalWrite(LED_PIN, LOW);
