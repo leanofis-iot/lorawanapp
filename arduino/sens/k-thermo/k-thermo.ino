@@ -143,7 +143,7 @@ void readIn() {
   In = ads1118.getMilliVolts();  
   digitalWrite(VREF_EN_PIN, HIGH);
 }
-void calcVal(uint8_t ch) {     
+void calcVal(const uint8_t ch) {     
   if (In < rangeMv1) {
     Val[ch] = pgm_read_float(&k1[0]) + In*(pgm_read_float(&k1[1]) + In*(pgm_read_float(&k1[2]) + In*(pgm_read_float(&k1[3])
       + In*(pgm_read_float(&k1[4]) + In*(pgm_read_float(&k1[5]) + In*(pgm_read_float(&k1[6]) + In*(pgm_read_float(&k1[7])
@@ -158,7 +158,7 @@ void calcVal(uint8_t ch) {
   } 
   Val[ch] = Val[ch] + ads1118.getTemperature();    
 }
-void calcValAlarm(uint8_t ch) {     
+void calcValAlarm(const uint8_t ch) {     
   if (Val[ch] <= conf.alr_min[ch] - conf.alr_min[ch] * conf.alr_hys[ch]) {
     if (ValPrev[ch] >= conf.alr_min[ch] + conf.alr_min[ch] * conf.alr_hys[ch]) {
       isAlarm = true; 
@@ -251,7 +251,7 @@ void setAds() {
   ads1118.disablePullup(); 
   ads1118.setFullScaleRange(ads1118.FSR_0256); 
 }
-void adjAds(uint8_t ch) {
+void adjAds(const uint8_t ch) {
   if (ch == 0) {
     ads1118.setInputSelected(ads1118.DIFF_0_1);
   } else if (ch == 1) {

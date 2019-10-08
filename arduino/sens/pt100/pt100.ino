@@ -145,10 +145,10 @@ void readIn() {
 void calcR() {
   R = (In * r_ext) / (extRef - In);  
 }
-void calcVal(uint8_t ch) {     
+void calcVal(const uint8_t ch) {     
   Val[ch] = (R - rtd_r0) / rtd_coeff;    
 }
-void calcValAlarm(uint8_t ch) {     
+void calcValAlarm(const uint8_t ch) {     
   if (Val[ch] <= conf.alr_min[ch] - conf.alr_min[ch] * conf.alr_hys[ch]) {
     if (ValPrev[ch] >= conf.alr_min[ch] + conf.alr_min[ch] * conf.alr_hys[ch]) {
       isAlarm = true; 
@@ -241,7 +241,7 @@ void setAds() {
   ads1118.disablePullup(); 
   ads1118.setFullScaleRange(ads1118.FSR_0256); 
 }
-void adjAds(uint8_t ch) {
+void adjAds(const uint8_t ch) {
   if (ch == 0) {
     ads1118.setInputSelected(ads1118.DIFF_0_1);
   } else if (ch == 1) {

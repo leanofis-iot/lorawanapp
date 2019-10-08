@@ -81,11 +81,11 @@ void readIn() {
     In /= 1000; // mV / 1000 = volt
   }    
 }
-void calcVal(uint8_t ch) {  
+void calcVal(const uint8_t ch) {  
   Val[ch] = (In - conf.in_min[ch]) * (conf.val_max[ch] - conf.val_min[ch]) / (conf.in_max[ch] - conf.in_min[ch]) + conf.val_min[ch];  
   //(x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;  
 }
-void calcValAlarm(uint8_t ch) {     
+void calcValAlarm(const uint8_t ch) {     
   if (Val[ch] <= conf.alr_min[ch] - conf.alr_min[ch] * conf.alr_hys[ch]) {
     if (ValPrev[ch] >= conf.alr_min[ch] + conf.alr_min[ch] * conf.alr_hys[ch]) {
       isAlarm = true; 
@@ -163,7 +163,7 @@ void setAds() {
   //ads1118.setSampligRate(ads1118.RATE_64SPS);  
   ads1118.disablePullup();  
 }
-void adjAds(uint8_t ch) {
+void adjAds(const uint8_t ch) {
   if (conf.an_end[ch] == andiff) {
     if (ch == 0) {
       ads1118.setInputSelected(ads1118.DIFF_0_1);

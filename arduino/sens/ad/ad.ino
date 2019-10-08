@@ -19,7 +19,7 @@ const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
 const uint8_t VOUT_EN_PIN   = A3;  // PF4/ADC4
 const uint8_t ADS_CS_PIN    = A4;  // PF1/ADC1
 
-float In, Val[2], InFact, ValPrev[2], BatVolt, BatVoltPrev;
+float In, InFact, Val[2], ValPrev[2], BatVolt, BatVoltPrev;
 volatile bool isAlarm;
 bool isPowerUp;
 const uint8_t digDly = 10, batEnDly = 1, batSampDly = 1, batSampNum = 3;
@@ -154,11 +154,11 @@ void readIn() {
     In /= 1000; // mV / 1000 = volt
   }    
 }
-void calcVal(uint8_t ch) {  
+void calcVal(const uint8_t ch) {  
   Val[ch] = (In - conf.in_min[ch]) * (conf.val_max[ch] - conf.val_min[ch]) / (conf.in_max[ch] - conf.in_min[ch]) + conf.val_min[ch];  
   //(x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;  
 }
-void calcValAlarm(uint8_t ch) {     
+void calcValAlarm(const uint8_t ch) {     
   if (Val[ch] <= conf.alr_min[ch] - conf.alr_min[ch] * conf.alr_hys[ch]) {
     if (ValPrev[ch] >= conf.alr_min[ch] + conf.alr_min[ch] * conf.alr_hys[ch]) {
       isAlarm = true; 
@@ -250,7 +250,7 @@ void setAds() {
   //ads1118.setSampligRate(ads1118.RATE_64SPS);  
   ads1118.disablePullup();  
 }
-void adjAds(uint8_t ch) {
+void adjAds(const uint8_t ch) {
   if (conf.an_end[ch] == andiff) {
     if (ch == 0) {
       ads1118.setInputSelected(ads1118.DIFF_0_1);
@@ -264,7 +264,7 @@ void adjAds(uint8_t ch) {
       ads1118.setFullScaleRange(ads1118.FSR_1024);
     } else if (conf.an_type[ch] == an420ma) {
       ads1118.setFullScaleRange(ads1118.FSR_1024);
-      InFact = InFact * (10 + 2.2 + 0.47) / (10 + 2.2);  
+      InFact = InFact * (10 + 10 + 2.2 + 0.47) / (10 + 10 + 2.2);      
     }
   } else if (conf.an_end[ch] == ansingle) {
     if (ch == 0) {
@@ -279,7 +279,7 @@ void adjAds(uint8_t ch) {
       ads1118.setFullScaleRange(ads1118.FSR_2048);    
     } else if (conf.an_type[ch] == an420ma) {
       ads1118.setFullScaleRange(ads1118.FSR_2048);
-      InFact = InFact * (10 + 10 + 2.2 + 0.47) / (10 + 10 + 2.2);  
+      InFact = InFact * (10 + 2.2 + 0.47) / (10 + 2.2);    
     }
   }  
 }
