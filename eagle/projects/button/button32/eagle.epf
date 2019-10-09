@@ -1,0 +1,18 @@
+[Eagle]
+Version="09 03 00"
+Platform="Windows"
+Globals="Globals"
+Desktop="Desktop"
+
+[Globals]
+AutoSaveProject=1
+UsedLibrary="C:/Users/Hi/Documents/EAGLE/libraries/SamacSys_Parts.lbr"
+UsedLibrary="C:/Users/Hi/Documents/EAGLE/libraries/mylibrary.lbr"
+
+[Win_1]
+Type="Control Panel"
+Number=0
+
+[Desktop]
+Screen="1366 768"
+Window="Win_1"
