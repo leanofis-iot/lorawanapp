@@ -44,9 +44,7 @@ void setup() {
   setPins();
   setPeripheral();
   analogReference(INTERNAL);
-  loadConf();
-  Serial.begin(115200);
-  while (!Serial);
+  loadConf();  
   rakSerial.begin(9600); 
   flashLed3();
   delay(5000);
@@ -179,6 +177,8 @@ void setSht() {
                     conf.alr_min[1] + conf.alr_min[1] * conf.alr_hys[1], conf.alr_min[1] - conf.alr_min[1] * conf.alr_hys[1]);
 }
 void setUsb() {
+  Serial.begin(115200);
+  while (!Serial);
   String str;
   while (true) {   
     if (Serial.available()) {

@@ -12,17 +12,8 @@ Conf conf;
 
 void setup() {
   setPins();
-  loadConf();
-  Serial.begin(115200);
-  while (!Serial);  
-  Serial.println("hello");
-  Serial.println(conf.read_t);
-  Serial.println(conf.bat_lo_v);
-  Serial.println(conf.alr_max[0]);
-  Serial.println(conf.alr_max[1]);
-  Serial.println("checking usb...");
-  if (USBSTA >> VBUS & 1) {
-    Serial.println("usb connected");
+  loadConf();  
+  if (USBSTA >> VBUS & 1) {    
     setUsb();
   } 
 }
@@ -40,6 +31,13 @@ void loadConf() {
   EEPROM.get(0, conf);  
 }  
 void setUsb() {
+  Serial.begin(115200);
+  while (!Serial);  
+  Serial.println("hello");
+  Serial.println(conf.read_t);
+  Serial.println(conf.bat_lo_v);
+  Serial.println(conf.alr_max[0]);
+  Serial.println(conf.alr_max[1]);
   String str;
   while (true) {   
     if (Serial.available()) {

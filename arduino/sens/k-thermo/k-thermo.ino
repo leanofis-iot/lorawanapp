@@ -50,9 +50,7 @@ void setup() {
   setPins();
   setPeripheral();
   analogReference(INTERNAL);
-  loadConf();
-  Serial.begin(115200);
-  while (!Serial);
+  loadConf();  
   rakSerial.begin(9600); 
   flashLed3();
   delay(5000);
@@ -259,6 +257,8 @@ void adjAds(const uint8_t ch) {
   }     
 }
 void setUsb() {
+  Serial.begin(115200);
+  while (!Serial);
   String str;
   while (true) {   
     if (Serial.available()) {

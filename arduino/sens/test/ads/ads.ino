@@ -177,7 +177,7 @@ void adjAds(const uint8_t ch) {
       ads1118.setFullScaleRange(ads1118.FSR_1024);
     } else if (conf.an_type[ch] == an420ma) {
       ads1118.setFullScaleRange(ads1118.FSR_1024);
-      InFact = InFact * (10 + 2.2 + 0.47) / (10 + 2.2);  
+      InFact = InFact * (10 + 10 + 2.2 + 0.47) / (10 + 10 + 2.2);      
     }
   } else if (conf.an_end[ch] == ansingle) {
     if (ch == 0) {
@@ -192,7 +192,7 @@ void adjAds(const uint8_t ch) {
       ads1118.setFullScaleRange(ads1118.FSR_2048);    
     } else if (conf.an_type[ch] == an420ma) {
       ads1118.setFullScaleRange(ads1118.FSR_2048);
-      InFact = InFact * (10 + 10 + 2.2 + 0.47) / (10 + 10 + 2.2);  
+      InFact = InFact * (10 + 2.2 + 0.47) / (10 + 2.2);    
     }
   }  
 }

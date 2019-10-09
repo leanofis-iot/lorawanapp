@@ -5,9 +5,7 @@ const uint8_t LED_PIN       = 10;  // PB6/ADC13/PCINT6
 AltSoftSerial rakSerial;
 
 void setup() {
-  setPins();
-  Serial.begin(115200);
-  while (!Serial);
+  setPins();  
   rakSerial.begin(9600); 
   delay(5000);
   if (USBSTA >> VBUS & 1) {
@@ -25,6 +23,8 @@ void setPins() {
   digitalWrite(LED_PIN, HIGH);  
 }
 void setUsb() {
+  Serial.begin(115200);
+  while (!Serial);
   String str;
   while (true) {   
     if (Serial.available()) {
