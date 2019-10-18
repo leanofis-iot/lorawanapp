@@ -19,9 +19,9 @@ void setup() {
 }
 void loop() {
   digitalWrite(LED_PIN, LOW);
-  delay(500);
+  delay(200);
   digitalWrite(LED_PIN, HIGH);
-  delay(500);
+  delay(200);
 }
 void setPins() {  
   pinMode(LED_PIN, OUTPUT);  
@@ -31,9 +31,13 @@ void loadConf() {
   EEPROM.get(0, conf);  
 }  
 void setUsb() {
+  digitalWrite(LED_PIN, LOW);
+  delay(3000);
+  digitalWrite(LED_PIN, HIGH);  
   Serial.begin(115200);
   while (!Serial);  
   Serial.println("hello");
+  Serial.println("setusb feb");
   Serial.println(conf.read_t);
   Serial.println(conf.bat_lo_v);
   Serial.println(conf.alr_max[0]);

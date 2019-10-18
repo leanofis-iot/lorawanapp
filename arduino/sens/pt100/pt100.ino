@@ -28,14 +28,14 @@ uint16_t minuteRead, minuteSend;
 const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
 
 struct Conf {
-  uint16_t read_t;
-  uint16_t send_t;
-  float bat_lo_v;       
-  float alr_max[2];
-  float alr_min[2];
-  float alr_hys[2];  
-  uint8_t an_type[2];
-  uint8_t dig_type[2];  
+  uint16_t read_t = 1;
+  uint16_t send_t = 2;
+  float bat_lo_v = 1.1;       
+  float alr_max[2] = {50, 50};
+  float alr_min[2] = {10, 10};
+  float alr_hys[2] = {0.01, 0.01};  
+  uint8_t an_type[2] = {1, 1};
+  uint8_t dig_type[2] = {0, 0};  
 };
 
 Conf conf;
@@ -49,8 +49,7 @@ void setup() {
   analogReference(INTERNAL);
   loadConf();  
   rakSerial.begin(9600); 
-  flashLed3();
-  delay(5000);
+  flashLed3();  
   if (USBSTA >> VBUS & 1) {
     setUsb();
   } 

@@ -7,7 +7,7 @@ AltSoftSerial rakSerial;
 void setup() {
   setPins();  
   rakSerial.begin(9600); 
-  delay(5000);
+  delay(1000);
   if (USBSTA >> VBUS & 1) {
     setUsb();
   } 
