@@ -47,19 +47,27 @@ void setup() {
   setPins();
   setPeripheral();
   analogReference(INTERNAL);
-  loadConf();  
+  //loadConf();  
   rakSerial.begin(9600); 
+  //Serial.begin(115200);
+  //while (!Serial);
   flashLed3();  
-  if (USBSTA >> VBUS & 1) {
-    setUsb();
-  } 
+  //if (USBSTA >> VBUS & 1) {
+  //  setUsb();
+  //}   
   setAds();   
   readAll();
   atRakClrSerial();
   atRakJoinOtaa();    
-  uplink();     
+  uplink();
+  //Serial.println("here loooop");   
 }
 void loop() {  
+
+  while(true) {
+    delay(10);
+  } 
+  
   for (uint8_t ii = 0; ii < 8 ; ii++) {   
     sleepAndWake();
     if (isAlarm) {
@@ -83,13 +91,13 @@ void loop() {
 void sleepAndWake() {  
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.dig_type[ch]) {
-      attachInterrupt(digitalPinToInterrupt(DIG_PIN[3 - ch]), wakeUp, conf.dig_type[ch]);    
+      attachInterrupt(digitalPinToInterrupt(DIG_PIN[ch]), wakeUp, conf.dig_type[ch]);    
     }    
   }    
   LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF     
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.dig_type[ch]) {
-      detachInterrupt(digitalPinToInterrupt(DIG_PIN[3 - ch])); 
+      detachInterrupt(digitalPinToInterrupt(DIG_PIN[ch])); 
     }    
   }       
 }
@@ -106,16 +114,17 @@ void uplink() {
   } 
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.dig_type[ch]) {
-      lpp.addDigitalInput(ch + 11, digitalRead(DIG_PIN[3 - ch]));
+      lpp.addDigitalInput(ch + 11, digitalRead(DIG_PIN[ch]));
     } 
   } 
   if (!isPowerUp) {
     isPowerUp = true;
     lpp.addAnalogOutput(30, 0);    
-  }
-  atRakWake();
-  atRakSend(lpp.getBuffer());  
-  atRakSleep();  
+  }  
+  //Serial.println(lppGetBuffer());    
+  //atRakWake();
+  atRakSend(lppGetBuffer());  
+  //atRakSleep();  
 }
 void readAll() {
   wdt_enable(WDTO_8S);
@@ -201,7 +210,7 @@ void calcBatAlarm() {
 }
 void setPins() {
   for (uint8_t ch = 0; ch < 2 ; ch++) {
-    pinMode(DIG_PIN[3 - ch], INPUT);
+    pinMode(DIG_PIN[ch], INPUT);
   }  
   pinMode(RAK_RES_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);  
@@ -228,9 +237,9 @@ void loadConf() {
   if (conf.read_t < 1) {
     conf.read_t = 1; 
   }
-  if (conf.send_t < 5) {
-    conf.send_t = 5;
-  }  
+  //if (conf.send_t < 5) {
+  //  conf.send_t = 5;
+  //}  
 }  
 void setAds() {
   ads1118.begin();
@@ -398,35 +407,32 @@ void setUsb() {
   }    
 }
 void atRakClrSerial() {
-  String str;
   while (rakSerial.available()) {
     const char inChar = (char)rakSerial.read();
-  }
-  rakSerial.println(F("at"));  
-  str = RakReadLine(wdtMs30000);  
+  }  
 }
 void atRakJoinOtaa() {  
   rakSerial.println(F("at+join=otaa"));
   String str;
-  str = RakReadLine(wdtMs30000);
-  if (!str.endsWith(F("OK"))) {
+  str = RakReadLine(wdtMs30000);  
+  if (!str.endsWith(F("OK"))) {    
     resetMe();
   }
   str = RakReadLine(wdtMs30000);
-  if (!str.endsWith(F("3,0,0"))) {
+  if (!str.endsWith(F("3,0,0"))) {    
     resetMe();
   } 
 }
 void atRakSend(String str) { 
   flashLed();
-  str = "at+send=0,1," + str; 
+  str = "at+send=0,1," + str;   
   rakSerial.println(str);
-  str = RakReadLine(wdtMs30000);
-  if (!str.endsWith(F("OK"))) {
+  str = RakReadLine(wdtMs30000);  
+  if (!str.endsWith(F("OK"))) {    
     resetMe();
   }
   str = RakReadLine(wdtMs30000);
-  if (!str.endsWith(F("2,0,0"))) {
+  if (!str.endsWith(F("2,0,0"))) {    
     resetMe();
   } 
   str = RakReadLine(wdtMs100);
@@ -475,7 +481,7 @@ void lppDownlinkDec(String str) {
     } else if (confKey == 13) {
       conf.dig_type[1] = confValue;  
     }
-    EEPROM.put(0, conf);
+    EEPROM.put(0, conf);    
     resetMe();  
   }  
 }
@@ -483,7 +489,7 @@ void atRakWake() {
   rakSerial.println(F("w"));
   String str;  
   str = RakReadLine(wdtMs30000);
-  if (!str.endsWith(F("8,0,0"))) {
+  if (!str.endsWith(F("8,0,0"))) {    
     resetMe();
   }   
 }
@@ -503,16 +509,27 @@ String RakReadLine(const unsigned long wdtMs) {
       const char inChar = (char)rakSerial.read();
       str += inChar;
       if (inChar == '\n') {
-        str.trim(); 
+        str.trim();             
         return str;
       }
-    }
+    }    
     wdt_reset();
   }
   str = "";
-  if (wdtMs == wdtMs30000) {
+  if (wdtMs == wdtMs30000) {    
     resetMe();
   }     
+}
+String lppGetBuffer() {
+  String str;
+  for(uint8_t ii = 0; ii < lpp.getSize(); ii++){    
+    if (lpp.getBuffer()[ii] < 16) {
+      str += '0';       
+    }
+    str += String(lpp.getBuffer()[ii], HEX);
+    str.toUpperCase();        
+  }
+  return str;
 }
 void resetMe() {
   wdt_enable(WDTO_15MS);
@@ -523,13 +540,13 @@ void wakeUp() {
 }
 void flashLed() {
   digitalWrite(LED_PIN, LOW);
-  delay(50);
+  delay(100);
   digitalWrite(LED_PIN, HIGH);
 }
 void flashLed3() {
   for (uint8_t ii = 0; ii < 3; ii++) {
     digitalWrite(LED_PIN, LOW);
-    delay(50);
+    delay(100);
     digitalWrite(LED_PIN, HIGH);
     delay(200);
   }  
