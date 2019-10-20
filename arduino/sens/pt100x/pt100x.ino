@@ -23,7 +23,7 @@ volatile bool isAlarm;
 bool isPowerUp;
 const uint8_t vrefEnDly = 1, digDly = 10, batEnDly = 1, batSampDly = 1, batSampNum = 3;
 uint16_t minuteRead, minuteSend;
-const unsigned long wdtMs30000 = 30000, wdtMs100 = 100;
+const long wdtMs30000 = 30000, wdtMs100 = 100;
 
 struct Conf {
   uint16_t read_t = 1;
@@ -43,7 +43,7 @@ CayenneLPP lpp(51);
 
 void setup() {
   setPins();
-  setPeripheral();
+  //setPeripheral();
   analogReference(INTERNAL);
   //loadConf();  
   rakSerial.begin(9600); 
@@ -57,11 +57,12 @@ void setup() {
   //readAll();
   atRakClrSerial();
   atRakJoinOtaa();
-  //atRakSleep(); 
+  atRakSleep(); 
   //delay(1000);   
   //uplink();      
 }
-void loop() {  
+void loop() { 
+ 
   for (uint8_t ii = 0; ii < 8 ; ii++) {   
     sleepAndWake();
     if (isAlarm) {
@@ -80,7 +81,8 @@ void loop() {
   }    
   if (minuteSend >= conf.send_t) {
     uplink();
-  }    
+  }
+    
 }
 void sleepAndWake() { 
 /* 
@@ -125,17 +127,17 @@ void uplink() {
   atRakSleep();  
 }
 void readAll() {
-  wdt_enable(WDTO_8S);
-  wdt_reset();
+  //wdt_enable(WDTO_8S);
+  //wdt_reset();
   readBatVolt();
-  calcBatAlarm();
+  //calcBatAlarm();
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.an_type[ch]) {
       adjAds(ch);
       readIn();
       calcR();
       calcVal(ch);
-      calcValAlarm(ch); 
+      //calcValAlarm(ch); 
     }
   }  
 }
@@ -501,7 +503,7 @@ void atRakSleep() {
     resetMe();
   }
 }
-String RakReadLine(const unsigned long wdtMs) {  
+String RakReadLine(const long wdtMs) { 
   String str;
   unsigned long startMs = millis();
   while ((unsigned long)(millis() - startMs) < wdtMs) {    
@@ -513,12 +515,12 @@ String RakReadLine(const unsigned long wdtMs) {
         return str;
       }
     }    
-    wdt_reset();
+    //wdt_reset();
   }
   str = "";
   if (wdtMs == wdtMs30000) {    
     resetMe();
-  }     
+  }
 }
 String lppGetBuffer() {
   String str;
@@ -532,8 +534,8 @@ String lppGetBuffer() {
   return str;
 }
 void resetMe() {
-  wdt_enable(WDTO_15MS);
-  while(true); 
+  //wdt_enable(WDTO_15MS);
+  //while(true); 
 }
 void wakeUp() {
   isAlarm = true;   
