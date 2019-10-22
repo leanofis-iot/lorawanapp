@@ -43,12 +43,12 @@ CayenneLPP lpp(51);
 
 void setup() {
   setPins();
+  rakSerial.begin(9600);
   setPeripheral(); 
   analogReference(INTERNAL);
   //loadConf();
   setAds();
-  rakSerial.begin(9600);   
-  delay(3000);       
+  delay(3000);         
   Serial.begin(115200);
   while (!Serial);    
   //if (USBSTA >> VBUS & 1) {
@@ -66,12 +66,7 @@ void loop() {
   for (uint8_t ii = 0; ii < 8 ; ii++) {   
     sleepAndWake();
     if (isAlarm) {
-      delay(digDly);
-      for (uint8_t ch = 0; ch < 2 ; ch++) {
-        if (conf.dig_type[ch]) {
-          detachInterrupt(digitalPinToInterrupt(DIG_PIN[ch])); 
-        }    
-      }              
+      delay(digDly);                
       uplink();      
     }              
   }    
@@ -93,7 +88,7 @@ void sleepAndWake() {
     if (conf.dig_type[ch]) {
       attachInterrupt(digitalPinToInterrupt(DIG_PIN[ch]), wakeUp, conf.dig_type[ch]);    
     }    
-  }
+  }  
   isAlarm = false;    
   LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF     
   for (uint8_t ch = 0; ch < 2 ; ch++) {
