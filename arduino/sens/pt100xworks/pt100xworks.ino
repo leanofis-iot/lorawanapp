@@ -21,7 +21,7 @@ float In, R, Val[2], ValPrev[2], BatVolt, BatVoltPrev;
 const float rtd_coeff = 0.3851, rtd_r0 = 100, extRef = 2.5, r_ext = 2400;
 volatile bool isAlarm;
 bool isPowerUp;
-const uint8_t vrefEnDly = 1, digDly = 100, batEnDly = 1, batSampDly = 1, batSampNum = 3;
+const uint8_t vrefEnDly = 1, digDly = 10, batEnDly = 1, batSampDly = 1, batSampNum = 3;
 uint16_t minuteRead, minuteSend;
 const long tmr30000 = 60000, tmr100 = 100;
 
@@ -33,7 +33,7 @@ struct Conf {
   float alr_min[2] = {10, 10};
   float alr_hys[2] = {0.01, 0.01};  
   uint8_t an_type[2] = {1, 1};
-  uint8_t dig_type[2] = {1, 1};  
+  uint8_t dig_type[2] = {0, 0};  
 };
 
 Conf conf;
@@ -59,19 +59,14 @@ void setup() {
   atRakJoinOtaa();
   atRakSleep();
   uplink();
-  delay(100);
   digitalWrite(LED_PIN, HIGH);      
 }
-void loop() { 
+void loop() {
+ 
   for (uint8_t ii = 0; ii < 8 ; ii++) {   
     sleepAndWake();
     if (isAlarm) {
-      delay(digDly);
-      for (uint8_t ch = 0; ch < 2 ; ch++) {
-        if (conf.dig_type[ch]) {
-          detachInterrupt(digitalPinToInterrupt(DIG_PIN[ch])); 
-        }    
-      }              
+      delay(digDly);       
       uplink();      
     }              
   }    
@@ -86,22 +81,24 @@ void loop() {
   }    
   if (minuteSend >= conf.send_t) {
     uplink();
-  }  
+  } 
+  
 }
 void sleepAndWake() { 
+/* 
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.dig_type[ch]) {
       attachInterrupt(digitalPinToInterrupt(DIG_PIN[ch]), wakeUp, conf.dig_type[ch]);    
     }    
-  }
-  isAlarm = false;    
+  }    
   LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF     
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.dig_type[ch]) {
       detachInterrupt(digitalPinToInterrupt(DIG_PIN[ch])); 
     }    
   }
-  //LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF        
+*/
+  LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF        
 }
 void uplink() {
   isAlarm = false;   
@@ -231,8 +228,7 @@ void loadConf() {
   //}  
 } 
 void atRakClrSerial() {
-  Serial.println("clearing...");
-  delay(10);  
+  Serial.println("clearing...");  
   while (rakSerial.available()) {
     const char inChar = (char)rakSerial.read();
     Serial.print(inChar);    
@@ -283,10 +279,10 @@ void atRakJoinOtaa() {
   
 }
 void atRakSend(String str) {
-  Serial.println("sending...");  
+  Serial.println("sending..."); 
+  atRakClrSerial();
   flashLed();
-  str = "at+send=0,1," + str;
-  atRakClrSerial();   
+  str = "at+send=0,1," + str;   
   rakSerial.println(str);
   str = RakReadLine(tmr30000);
   Serial.println("send str 1:");
@@ -413,8 +409,7 @@ void setUsb() {
       str += chrUsb;
       if (chrUsb == '\n') {
         str.trim();       
-        if (str.startsWith(F("at"))) {
-          atRakClrSerial();///////////////////////////////////////       
+        if (str.startsWith(F("at"))) {       
           rakSerial.println(str);
         } else if (str.startsWith(F("read_t"))) {
           if (str.indexOf(F("=")) >= 0) {
