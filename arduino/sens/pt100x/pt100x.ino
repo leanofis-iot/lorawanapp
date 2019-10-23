@@ -21,7 +21,7 @@ float In, R, Val[2], ValPrev[2], BatVolt, BatVoltPrev;
 const float rtd_coeff = 0.3851, rtd_r0 = 100, extRef = 2.5, r_ext = 2400;
 volatile bool isAlarm;
 bool isPowerUp;
-const uint8_t vrefEnDly = 1, digDly = 100, batEnDly = 1, batSampDly = 1, batSampNum = 3;
+const uint8_t vrefEnDly = 500, digDly = 100, batEnDly = 1, batSampDly = 1, batSampNum = 3;
 uint16_t minuteRead, minuteSend;
 const long tmr30000 = 60000, tmr100 = 100;
 
@@ -48,9 +48,9 @@ void setup() {
   analogReference(INTERNAL);
   //loadConf();
   setAds();
-  delay(3000);         
-  Serial.begin(115200);
-  while (!Serial);    
+  delay(4000);         
+  //Serial.begin(115200);
+  //while (!Serial);    
   //if (USBSTA >> VBUS & 1) {
   //  setUsb();
   //}
@@ -66,7 +66,8 @@ void loop() {
   for (uint8_t ii = 0; ii < 8 ; ii++) {   
     sleepAndWake();
     if (isAlarm) {
-      delay(digDly);                
+      readAll();
+      delay(digDly);  //???????????????????????              
       uplink();      
     }              
   }    
@@ -95,8 +96,7 @@ void sleepAndWake() {
     if (conf.dig_type[ch]) {
       detachInterrupt(digitalPinToInterrupt(DIG_PIN[ch])); 
     }    
-  }
-  //LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF        
+  }    
 }
 void uplink() {
   isAlarm = false;   
@@ -119,8 +119,8 @@ void uplink() {
     lpp.addAnalogOutput(30, 0);    
   }  
   atRakWake();
-  //atRakSend(lppGetBuffer()); 
-  atRakSend("01671234"); 
+  atRakSend(lppGetBuffer()); 
+  //atRakSend("01671234"); 
   atRakSleep();    
 }
 void readAll() {  
@@ -210,9 +210,9 @@ void setAds() {
   ads1118.setFullScaleRange(ads1118.FSR_0256); 
 }
 void adjAds(const uint8_t ch) {
-  if (ch == 0) {
+  if (ch == 1) {
     ads1118.setInputSelected(ads1118.DIFF_0_1);
-  } else if (ch == 1) {
+  } else if (ch == 0) {
     ads1118.setInputSelected(ads1118.DIFF_2_3);
   }     
 }
