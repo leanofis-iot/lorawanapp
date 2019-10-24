@@ -17,16 +17,25 @@ const uint8_t VOUT_EN_PIN   = A3;  // PF4/ADC4
 const uint8_t ADS_CS_PIN    = A4;  // PF1/ADC1
 
 float In, R, Val[2];
+uint8_t hysRegionPrev[2] = {3, 3};
 const float rtd_coeff = 0.3851, rtd_r0 = 100, extRef = 2.5, r_ext = 2400;
-const uint8_t vrefEnDly = 500;
+const uint8_t vrefEnDly = 20;
 unsigned long prevmillis = millis();
 const long interval = 8000;
+bool isAlarm;
 
+struct Conf {  
+  float bat_lo_v = 1.1;       
+  float alr_max[2] = {40, 40};
+  float alr_min[2] = {25, 25};
+  float alr_hys[2] = {0.01, 0.01};   
+};
+
+Conf conf;
 ADS1118 ads1118(ADS_CS_PIN);
 
 void setup() {
   setPins();
-  //digitalWrite(VREF_EN_PIN, LOW);
   delay(1000);
   setAds();
   Serial.begin(115200);
@@ -34,38 +43,32 @@ void setup() {
 }
 void loop() { 
   unsigned long curmillis = millis();
-  if (curmillis - prevmillis >= interval) {
-    
+  if (curmillis - prevmillis >= interval) {    
     readAll();
-    Serial.println("");
-    Serial.println(Val[0]);
+    Serial.println("");    
+    Serial.println(hysRegionPrev[0]);
+    Serial.println(Val[0]);    
+    Serial.println(hysRegionPrev[1]);
     Serial.println(Val[1]);
-    
-    
-       
+    Serial.println(isAlarm);
+    isAlarm = false;       
     prevmillis = curmillis;     
   }    
 }
-void readAll() {      
-  //readIn();
-  //calcR();
-  //calcVal();
-  for (uint8_t ch = 0; ch < 2; ch++) {
-    //if (conf.an_type[ch]) {
-      adjAds(ch);
-      readIn();
-      calcR();
-      calcVal(ch);           
-    //}
-  }  
-}
-void readIn() {
+void readAll() {   
   digitalWrite(VREF_EN_PIN, LOW);
-  //ads1118.setInputSelected(ads1118.DIFF_0_1);
-  //ads1118.setInputSelected(ads1118.DIFF_2_3);
-  delay(vrefEnDly);  
-  In = ads1118.getMilliVolts();  
-  digitalWrite(VREF_EN_PIN, HIGH); 
+  delay(vrefEnDly); 
+  for (uint8_t ch = 0; ch < 2; ch++) {    
+    adjAds(ch);
+    readIn();
+    calcR();
+    calcVal(ch);
+    calcValAlarm(ch);   
+  }
+  digitalWrite(VREF_EN_PIN, HIGH);  
+}
+void readIn() {    
+  In = ads1118.getMilliVolts();   
   In /= 1000; // mV / 1000 = volt 
 }
 void calcR() {
@@ -74,20 +77,43 @@ void calcR() {
 void calcVal(const uint8_t ch) {     
   Val[ch] = (R - rtd_r0) / rtd_coeff;    
 }
+void calcValAlarm(const uint8_t ch) {  
+  if (Val[ch] <= conf.alr_min[ch] - conf.alr_min[ch] * conf.alr_hys[ch]) {
+    if (hysRegionPrev[ch] > 2) {
+      isAlarm = true;
+    }
+    hysRegionPrev[ch] = 1;    
+  //} else if ((Val[ch] > conf.alr_min[ch] - conf.alr_min[ch] * conf.alr_hys[ch]) && (Val[ch] < conf.alr_min[ch] + conf.alr_min[ch] * conf.alr_hys[ch])) {
+  //  hysRegionPrev[ch] = 2;
+  } else if ((Val[ch] >= conf.alr_min[ch] + conf.alr_min[ch] * conf.alr_hys[ch]) && (Val[ch] <= conf.alr_max[ch] - conf.alr_max[ch] * conf.alr_hys[ch])) {
+    if (hysRegionPrev[ch] < 2 || hysRegionPrev[ch] > 4) {
+      isAlarm = true;
+    }
+    hysRegionPrev[ch] = 3;
+  //} else if ((Val[ch] > conf.alr_max[ch] - conf.alr_max[ch] * conf.alr_hys[ch]) && (Val[ch] < conf.alr_max[ch] + conf.alr_max[ch] * conf.alr_hys[ch])) {
+  //  hysRegionPrev[ch] = 4;
+  } else if (Val[ch] >= conf.alr_max[ch] + conf.alr_max[ch] * conf.alr_hys[ch]) {
+    if (hysRegionPrev[ch] < 4) {
+      isAlarm = true;
+    }
+    hysRegionPrev[ch] = 5;    
+  }
+} 
 void setAds() {
   ads1118.begin();
-  //ads1118.setSampligRate(ads1118.RATE_64SPS);  
+  //ads1118.setSamplingRate(ads1118.RATE_64SPS); 
+  ads1118.setSamplingRate(ads1118.RATE_250SPS); 
   ads1118.disablePullup(); 
   ads1118.setFullScaleRange(ads1118.FSR_0256);
-  //ads1118.setInputSelected(ads1118.DIFF_2_3);
-  //delay(200); 
+  ads1118.setInputSelected(ads1118.DIFF_0_1);   
 }
 void adjAds(const uint8_t ch) {
   if (ch == 0) {
     ads1118.setInputSelected(ads1118.DIFF_2_3);
   } else if (ch == 1) {
     ads1118.setInputSelected(ads1118.DIFF_0_1);
-  }    
+  }
+  delay(10);    
 }
 void setPins() {
   for (uint8_t ch = 0; ch < 2; ch++) {
