@@ -17,7 +17,8 @@ const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
 const uint8_t VOUT_EN_PIN   = A3;  // PF4/ADC4
 const uint8_t ADS_CS_PIN    = A4;  // PF1/ADC1
 
-float In, R, Val[2], ValPrev[2], BatVolt, BatVoltPrev;
+float In, R, Val[2], BatVolt, BatVoltPrev;
+uint8_t hysRegionPrev[2] = {3, 3};
 const float rtd_coeff = 0.3851, rtd_r0 = 100, extRef = 2.5, r_ext = 2400;
 volatile bool isAlarm;
 bool isPowerUp;
@@ -29,7 +30,7 @@ struct Conf {
   uint16_t read_t = 1;
   uint16_t send_t = 2;
   float bat_lo_v = 1.1;       
-  float alr_max[2] = {50, 50};
+  float alr_max[2] = {40, 40};
   float alr_min[2] = {10, 10};
   float alr_hys[2] = {0.01, 0.01};  
   uint8_t an_type[2] = {1, 1};
@@ -135,7 +136,7 @@ void readAll() {
       readIn();
       calcR();
       calcVal(ch);
-      //calcValAlarm(ch); 
+      calcValAlarm(ch); 
     }
   }
   digitalWrite(VREF_EN_PIN, HIGH);  
@@ -150,28 +151,23 @@ void calcR() {
 void calcVal(const uint8_t ch) {     
   Val[ch] = (R - rtd_r0) / rtd_coeff;    
 }
-void calcValAlarm(const uint8_t ch) {     
+void calcValAlarm(const uint8_t ch) {  
   if (Val[ch] <= conf.alr_min[ch] - conf.alr_min[ch] * conf.alr_hys[ch]) {
-    if (ValPrev[ch] >= conf.alr_min[ch] + conf.alr_min[ch] * conf.alr_hys[ch]) {
-      isAlarm = true; 
+    if (hysRegionPrev[ch] > 2) {
+      isAlarm = true;
     }
-  }
-  if (Val[ch] >= conf.alr_min[ch] + conf.alr_min[ch] * conf.alr_hys[ch]) {
-    if (ValPrev[ch] <= conf.alr_min[ch] - conf.alr_min[ch] * conf.alr_hys[ch]) {
-      isAlarm = true; 
+    hysRegionPrev[ch] = 1;  
+  } else if ((Val[ch] >= conf.alr_min[ch] + conf.alr_min[ch] * conf.alr_hys[ch]) && (Val[ch] <= conf.alr_max[ch] - conf.alr_max[ch] * conf.alr_hys[ch])) {
+    if (hysRegionPrev[ch] < 2 || hysRegionPrev[ch] > 4) {
+      isAlarm = true;
     }
-  }
-  if (Val[ch] >= conf.alr_max[ch] + conf.alr_max[ch] * conf.alr_hys[ch]) {
-    if (ValPrev[ch] <= conf.alr_max[ch] - conf.alr_max[ch] * conf.alr_hys[ch]) {
-      isAlarm = true; 
+    hysRegionPrev[ch] = 3; 
+  } else if (Val[ch] >= conf.alr_max[ch] + conf.alr_max[ch] * conf.alr_hys[ch]) {
+    if (hysRegionPrev[ch] < 4) {
+      isAlarm = true;
     }
+    hysRegionPrev[ch] = 5;    
   }
-  if (Val[ch] <= conf.alr_max[ch] - conf.alr_max[ch] * conf.alr_hys[ch]) {
-    if (ValPrev[ch] >= conf.alr_max[ch] + conf.alr_max[ch] * conf.alr_hys[ch]) {
-      isAlarm = true; 
-    }
-  }
-  ValPrev[ch] = Val[ch];  
 } 
 void readBatVolt() {
   power_adc_enable();  
