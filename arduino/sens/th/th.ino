@@ -13,6 +13,7 @@ const uint8_t RAK_RES_PIN   = 4;   // PD4/ADC8
 const uint8_t LED_PIN       = 10;  // PB6/ADC13/PCINT6
 const uint8_t BAT_PIN       = A0;  // PF7/ADC7
 const uint8_t BAT_EN_PIN    = A1;  // PF6/ADC6
+const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
 
 float BatVolt, BatVoltPrev;
 volatile bool isAlarm;
@@ -282,11 +283,13 @@ void setPins() {
   pinMode(LED_PIN, OUTPUT);  
   pinMode(BAT_PIN, INPUT);
   pinMode(BAT_EN_PIN, OUTPUT);
+  pinMode(VREF_EN_PIN, OUTPUT); 
     
   digitalWrite(SHT_RES_PIN, HIGH);
   digitalWrite(RAK_RES_PIN, HIGH);
   digitalWrite(LED_PIN, HIGH);
-  digitalWrite(BAT_EN_PIN, HIGH);  
+  digitalWrite(BAT_EN_PIN, HIGH);
+  digitalWrite(VREF_EN_PIN, LOW);  
 }
 void setPeripheral() {
   digitalWrite(RAK_RES_PIN, LOW);
