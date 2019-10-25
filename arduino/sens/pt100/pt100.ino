@@ -66,7 +66,7 @@ void setup() {
   digitalWrite(LED_PIN, HIGH);      
 }
 void loop() { 
-  for (uint8_t ii = 0; ii < 8 ; ii++) {   
+  for (uint8_t ii = 0; ii < 1 ; ii++) {   
     sleepAndWake();
     if (isAlarm) {
       readAll();
@@ -107,12 +107,12 @@ void uplink() {
   minuteSend = 0;  
   lpp.reset();
   lpp.addAnalogInput(0, BatVolt); 
-  for (uint8_t ch = 0; ch < 2 ; ch++) {
+  for (uint8_t ch = 1; ch < 2 ; ch++) {
     if (conf.an_type[ch]) {
-      lpp.addTemperature(ch + 1, Val[ch]);      
+      lpp.addTemperature(ch + 1, Val[ch] - 4);      
     } 
   } 
-  for (uint8_t ch = 0; ch < 2 ; ch++) {
+  for (uint8_t ch = 0; ch < 1 ; ch++) {
     if (conf.dig_type[ch]) {
       lpp.addDigitalInput(ch + 11, digitalRead(DIG_PIN[ch]));
     } 
