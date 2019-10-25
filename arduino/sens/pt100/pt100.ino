@@ -6,7 +6,6 @@
 #include <CayenneLPP.h>
 #include "ADS1118.h"
 #include <SPI.h>
-//#include <stdlib.h>
 
 const uint8_t DIG_PIN[2]    = {3, 2}; // PD0/SCL/INT0, PD1/SDA/INT1
 const uint8_t RAK_RES_PIN   = 4;   // PD4/ADC8
@@ -50,27 +49,26 @@ void setup() {
   //loadConf();
   delay(1000);
   setAds();
-  delay(3000);         
   //Serial.begin(115200);
   //while (!Serial);    
   //if (USBSTA >> VBUS & 1) {
   //  setUsb();
   //}
+  delay(3000);  
   digitalWrite(LED_PIN, LOW);
   readAll();  
   atRakJoinOtaa();  
-  atRakSleep();
-  //delay(10000);
+  atRakSleep();  
   uplink();
   delay(100);
   digitalWrite(LED_PIN, HIGH);      
 }
 void loop() { 
-  for (uint8_t ii = 0; ii < 1 ; ii++) {   
+  for (uint8_t ii = 0; ii < 8 ; ii++) {   
     sleepAndWake();
     if (isAlarm) {
       readAll();
-      delay(digDly);  //???????????????????????              
+      delay(digDly);               
       uplink();      
     }              
   }    
@@ -223,73 +221,53 @@ void loadConf() {
   //  conf.send_t = 5;
   //}  
 } 
-void atRakClrSerial() {
-  Serial.println("clearing...");
+void atRakClrSerial() {  
   delay(10);  
   while (rakSerial.available()) {
-    const char inChar = (char)rakSerial.read();
-    Serial.print(inChar);    
-  }
-  Serial.println("cleared");  
+    const char inChar = (char)rakSerial.read();        
+  }    
 }
-void atRakWake() { 
-  Serial.println("waking...");
+void atRakWake() {   
   atRakClrSerial();  
   rakSerial.println(F("at+sleep"));
   String str;   
-  str = RakReadLine(tmr30000);
-  Serial.println("wake str:");
-  Serial.println(str);  
+  str = RakReadLine(tmr30000);   
   if (!str.endsWith(F("8,0,0"))) {    
     
   }     
 }
-void atRakSleep() {
-  Serial.println("sleeping...");
+void atRakSleep() {  
   atRakClrSerial();     
   rakSerial.println(F("at+sleep"));
   String str;   
-  str = RakReadLine(tmr30000);
-  Serial.println("sleep str:"); 
-  Serial.println(str); 
+  str = RakReadLine(tmr30000);   
   if (!str.endsWith(F("OK"))) {
     
   }     
 }
-void atRakJoinOtaa() { 
-  Serial.println("joining...");
+void atRakJoinOtaa() {   
   atRakClrSerial();  
   rakSerial.println(F("at+join=otaa"));  
   String str;
-  str = RakReadLine(tmr30000);
-  Serial.println("join str 1:");
-  Serial.println(str);   
+  str = RakReadLine(tmr30000);   
   if (!str.endsWith(F("OK"))) {    
     
   }  
-  str = RakReadLine(tmr30000);
-  Serial.println("join str 2");
-  Serial.println(str);  
+  str = RakReadLine(tmr30000);   
   if (!str.endsWith(F("3,0,0"))) {    
     
-  }
-  
+  }  
 }
-void atRakSend(String str) {
-  Serial.println("sending...");  
+void atRakSend(String str) {   
   flashLed();
   str = "at+send=0,1," + str;
   atRakClrSerial();   
   rakSerial.println(str);
-  str = RakReadLine(tmr30000);
-  Serial.println("send str 1:");
-  Serial.println(str);  
+  str = RakReadLine(tmr30000);    
   if (!str.endsWith(F("OK"))) {    
     
   }
-  str = RakReadLine(tmr30000);
-  Serial.println("send str 2");
-  Serial.println(str);
+  str = RakReadLine(tmr30000);  
   if (!str.endsWith(F("2,0,0"))) {    
     
   }
@@ -306,8 +284,7 @@ void atRakSend(String str) {
 }
 String RakReadLine(const long tmr) { 
   String str;
-  unsigned long startMs = millis();
-  //while ((unsigned long)(millis() - startMs) < tmr) { 
+  unsigned long startMs = millis();  
   while (millis() - startMs < tmr) {    
     while (rakSerial.available()) {
       const char inChar = (char)rakSerial.read();
