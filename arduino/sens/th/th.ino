@@ -44,8 +44,8 @@ void setup() {
   //loadConf();  
   delay(1000);
   setSht();
-  //Serial.begin(115200);
-  //while (!Serial);
+  Serial.begin(115200);
+  while (!Serial);
   //if (USBSTA >> VBUS & 1) {
   //  setUsb();
   //} 

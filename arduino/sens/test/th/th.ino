@@ -23,22 +23,22 @@ ClosedCube_SHT31D sht;
 void setup() {
   setPins();
   setPeripheral();
-  delay(1000);
-  setSht();
+  delay(1000);  
   Serial.begin(115200);
   while (!Serial);
+  setSht();
   flashLed3();    
   attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUp, CHANGE);    
 }
 void loop() { 
+  Serial.println("");
   if (isAlarm) {
     Serial.println("alarm !!");
     isAlarm = false;     
   }    
   SHT31D result = sht.periodicFetchData();
-  Serial.println("");
-  Serial.println("t: " + String(result.t));
-  Serial.println("rh: " + String(result.rh));
+  Serial.println(String(result.t));
+  Serial.println(String(result.rh));
   delay(5000);
 }
 void setPins() {
@@ -57,11 +57,13 @@ void setPins() {
 void setPeripheral() {  
   digitalWrite(SHT_RES_PIN, LOW);
   delay(100);
-  digitalWrite(RAK_RES_PIN, HIGH);  
+  digitalWrite(SHT_RES_PIN, HIGH);  
 }
 void setSht() {
   Wire.begin();
   sht.begin(0x44);
+  Serial.print("Serial #");
+  Serial.println(sht.readSerialNumber());
   sht.clearAll();
   sht.periodicStart(SHT3XD_REPEATABILITY_LOW, SHT3XD_FREQUENCY_1HZ);
   sht.writeAlertHigh(conf.alr_max[0] + conf.alr_max[0] * conf.alr_hys[0], conf.alr_max[0] - conf.alr_max[0] * conf.alr_hys[0], 
