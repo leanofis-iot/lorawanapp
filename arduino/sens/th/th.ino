@@ -63,7 +63,8 @@ void loop() {
     sleepAndWake();
     if (isAlarm) {
       readAll();       
-      uplink();      
+      uplink();
+      break;      
     }              
   }    
   minuteRead++;
@@ -91,19 +92,19 @@ void uplink() {
   minuteSend = 0;  
   SHT31D result = sht.periodicFetchData();
   lpp.reset();
-  lpp.addAnalogInput(0, BatVolt); 
+  //lpp.addAnalogInput(0, BatVolt); 
   lpp.addTemperature(1, result.t);
   lpp.addRelativeHumidity(2, result.rh);
-  if (!isPowerUp) {
-    isPowerUp = true;
-    lpp.addAnalogOutput(30, 0);    
-  }
+  //if (!isPowerUp) {
+  //  isPowerUp = true;
+  //  lpp.addAnalogOutput(30, 0);    
+  //}
   atRakWake();
   atRakSend(lppGetBuffer());  
   atRakSleep();  
 }
 void readAll() {  
-  readBatVolt();
+  //readBatVolt();
   //calcBatAlarm();  
 }
 void readBatVolt() {
@@ -111,16 +112,15 @@ void readBatVolt() {
   digitalWrite(BAT_EN_PIN, LOW);
   delay(batEnDly);
   uint16_t samples[batSampNum];
-  uint8_t ii;
-  for (ii = 0; ii < batSampNum; ii++) {
+  for (uint8_t ii = 0; ii < batSampNum; ii++) {
     samples[ii] = analogRead(BAT_PIN);
     delay(batSampDly);
   } 
   digitalWrite(BAT_EN_PIN, HIGH); 
   power_adc_disable(); 
   BatVolt = 0;
-  for (ii = 0; ii < batSampNum; ii++) {
-    BatVolt += samples[ii];
+  for (uint8_t jj = 0; jj < batSampNum; jj++) {
+    BatVolt += samples[jj];
   }
   BatVolt /= batSampNum;   
   BatVolt = ( BatVolt / 1023 ) * 3.6;  
@@ -159,14 +159,14 @@ void loadConf() {
 void atRakClrSerial() {  
   delay(10);  
   while (rakSerial.available()) {
-    const char inChar = (char)rakSerial.read();        
+    const char inChar = (char)rakSerial.read();           
   }    
 }
 void atRakWake() {   
   atRakClrSerial();  
   rakSerial.println(F("at+sleep"));
   String str;   
-  str = RakReadLine(tmr30000);   
+  str = RakReadLine(tmr30000);    
   if (!str.endsWith(F("8,0,0"))) {    
     
   }     
@@ -175,7 +175,7 @@ void atRakSleep() {
   atRakClrSerial();     
   rakSerial.println(F("at+sleep"));
   String str;   
-  str = RakReadLine(tmr30000);   
+  str = RakReadLine(tmr30000);  
   if (!str.endsWith(F("OK"))) {
     
   }     
@@ -184,11 +184,11 @@ void atRakJoinOtaa() {
   atRakClrSerial();  
   rakSerial.println(F("at+join=otaa"));  
   String str;
-  str = RakReadLine(tmr30000);   
+  str = RakReadLine(tmr30000);     
   if (!str.endsWith(F("OK"))) {    
     
   }  
-  str = RakReadLine(tmr30000);   
+  str = RakReadLine(tmr30000);    
   if (!str.endsWith(F("3,0,0"))) {    
     
   }  
@@ -202,7 +202,7 @@ void atRakSend(String str) {
   if (!str.endsWith(F("OK"))) {    
     
   }
-  str = RakReadLine(tmr30000);  
+  str = RakReadLine(tmr30000);    
   if (!str.endsWith(F("2,0,0"))) {    
     
   }
@@ -300,7 +300,7 @@ void setPeripheral() {
 }
 void setUsb() {
   Serial.begin(115200);
-  while (!Serial);
+  while (!Serial);  
   String str;
   while (true) {   
     if (Serial.available()) {

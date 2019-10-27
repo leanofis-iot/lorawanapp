@@ -69,7 +69,8 @@ void loop() {
     if (isAlarm) {
       readAll();
       delay(digDly);               
-      uplink();      
+      uplink();
+      break;      
     }              
   }    
   minuteRead++;
@@ -104,7 +105,7 @@ void uplink() {
   minuteRead = 0;
   minuteSend = 0;  
   lpp.reset();
-  lpp.addAnalogInput(0, BatVolt); 
+  //lpp.addAnalogInput(0, BatVolt); 
   for (uint8_t ch = 1; ch < 2 ; ch++) {
     if (conf.an_type[ch]) {
       lpp.addTemperature(ch + 1, Val[ch] - 4);      
@@ -115,16 +116,16 @@ void uplink() {
       lpp.addDigitalInput(ch + 11, digitalRead(DIG_PIN[ch]));
     } 
   } 
-  if (!isPowerUp) {
-    isPowerUp = true;
-    lpp.addAnalogOutput(30, 0);    
-  }  
+  //if (!isPowerUp) {
+  //  isPowerUp = true;
+  //  lpp.addAnalogOutput(30, 0);    
+  //}  
   atRakWake();
   atRakSend(lppGetBuffer());  
   atRakSleep();    
 }
 void readAll() {  
-  readBatVolt();
+  //readBatVolt();
   //calcBatAlarm();
   digitalWrite(VREF_EN_PIN, LOW);
   delay(vrefEnDly);
@@ -172,16 +173,15 @@ void readBatVolt() {
   digitalWrite(BAT_EN_PIN, LOW);
   delay(batEnDly);
   uint16_t samples[batSampNum];
-  uint8_t ii;
-  for (ii = 0; ii < batSampNum; ii++) {
+  for (uint8_t ii = 0; ii < batSampNum; ii++) {
     samples[ii] = analogRead(BAT_PIN);
     delay(batSampDly);
   } 
   digitalWrite(BAT_EN_PIN, HIGH); 
   power_adc_disable(); 
   BatVolt = 0;
-  for (ii = 0; ii < batSampNum; ii++) {
-    BatVolt += samples[ii];
+  for (uint8_t jj = 0; jj < batSampNum; jj++) {
+    BatVolt += samples[jj];
   }
   BatVolt /= batSampNum;   
   BatVolt = ( BatVolt / 1023 ) * 3.6;  
