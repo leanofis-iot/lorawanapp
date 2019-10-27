@@ -26,14 +26,14 @@ uint16_t minuteRead, minuteSend;
 const long tmr30000 = 60000, tmr100 = 100;
 
 struct Conf {
-  uint16_t read_t = 1;
-  uint16_t send_t = 2;
-  float bat_lo_v = 1.1;       
-  float alr_max[2] = {40, 40};
-  float alr_min[2] = {10, 10};
-  float alr_hys[2] = {0.01, 0.01};  
-  uint8_t an_type[2] = {1, 1};
-  uint8_t dig_type[2] = {1, 1};  
+  uint16_t read_t;
+  uint16_t send_t;
+  float bat_lo_v;       
+  float alr_max[2];
+  float alr_min[2];
+  float alr_hys[2];  
+  uint8_t an_type[2];
+  uint8_t dig_type[2];  
 };
 
 Conf conf;
@@ -46,14 +46,12 @@ void setup() {
   rakSerial.begin(9600);
   setPeripheral(); 
   analogReference(INTERNAL);
-  //loadConf();
+  loadConf();
   delay(1000);
-  setAds();
-  //Serial.begin(115200);
-  //while (!Serial);    
-  //if (USBSTA >> VBUS & 1) {
-  //  setUsb();
-  //}
+  setAds();    
+  if (USBSTA >> VBUS & 1) {
+    setUsb();
+  }
   delay(3000);  
   digitalWrite(LED_PIN, LOW);
   readAll();  
@@ -101,6 +99,7 @@ void sleepAndWake() {
   }    
 }
 void uplink() {
+  digitalWrite(LED_PIN, LOW);
   isAlarm = false;   
   minuteRead = 0;
   minuteSend = 0;  
@@ -122,7 +121,8 @@ void uplink() {
   //}  
   atRakWake();
   atRakSend(lppGetBuffer());  
-  atRakSleep();    
+  atRakSleep();
+  digitalWrite(LED_PIN, HIGH);    
 }
 void readAll() {  
   //readBatVolt();
@@ -258,8 +258,7 @@ void atRakJoinOtaa() {
     
   }  
 }
-void atRakSend(String str) {   
-  flashLed();
+void atRakSend(String str) {  
   str = "at+send=0,1," + str;
   atRakClrSerial();   
   rakSerial.println(str);
@@ -532,9 +531,4 @@ void wakeUp() {
 void resetMe() {
   wdt_enable(WDTO_15MS);
   while(true); 
-}
-void flashLed() {
-  digitalWrite(LED_PIN, LOW);
-  delay(2000);
-  digitalWrite(LED_PIN, HIGH);
 }
