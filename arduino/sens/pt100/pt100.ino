@@ -56,19 +56,20 @@ void setup() {
   digitalWrite(LED_PIN, LOW);
   readAll();  
   atRakJoinOtaa();  
-  atRakSleep();  
+  atRakSleep();
+  delay(10000);  
   uplink();
   delay(100);
   digitalWrite(LED_PIN, HIGH);      
 }
 void loop() { 
-  for (uint8_t ii = 0; ii < 8 ; ii++) {   
+  for (uint8_t slpCnt = 0; slpCnt < 8 ; slpCnt++) {   
     sleepAndWake();
     if (isAlarm) {
       readAll();
       delay(digDly);               
       uplink();
-      break;      
+      return;      
     }              
   }    
   minuteRead++;
@@ -77,11 +78,13 @@ void loop() {
     minuteRead = 0;    
     readAll();
     if (isAlarm) {      
-      uplink();      
+      uplink();
+      return;      
     }    
   }    
   if (minuteSend >= conf.send_t) {
     uplink();
+    return;
   }  
 }
 void sleepAndWake() { 

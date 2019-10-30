@@ -52,17 +52,18 @@ void setup() {
   readAll();  
   atRakJoinOtaa();  
   atRakSleep();
+  delay(10000);
   uplink();
   delay(100);
   digitalWrite(LED_PIN, HIGH);        
 }
 void loop() {  
-  for (uint8_t ii = 0; ii < 8 ; ii++) {   
+  for (uint8_t slpCnt = 0; slpCnt < 8 ; slpCnt++) {   
     sleepAndWake();
     if (isAlarm) {
       readAll();       
       uplink();
-      break;      
+      return;      
     }              
   }    
   minuteRead++;
@@ -71,11 +72,13 @@ void loop() {
     minuteRead = 0;    
     readAll();
     if (isAlarm) {      
-      uplink();      
+      uplink();
+      return;      
     }    
   }    
   if (minuteSend >= conf.send_t) {
     uplink();
+    return;
   }    
 }
 void sleepAndWake() {  
@@ -89,7 +92,7 @@ void uplink() {
   isAlarm = false;   
   minuteRead = 0;
   minuteSend = 0;  
-  SHT31D result = sht.periodicFetchData();
+  SHT31D result = sht.periodicFetchData();  
   lpp.reset();
   //lpp.addAnalogInput(0, BatVolt); 
   lpp.addTemperature(1, result.t);
