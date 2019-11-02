@@ -63,7 +63,7 @@ void setup() {
   digitalWrite(LED_PIN, HIGH);      
 }
 void loop() { 
-  for (uint8_t slpCnt = 0; slpCnt < 8 ; slpCnt++) {   
+  for (uint8_t slpCnt = 0; slpCnt < 4 ; slpCnt++) {   
     sleepAndWake();
     if (isAlarm) {
       readAll();
