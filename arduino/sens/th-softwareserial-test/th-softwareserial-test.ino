@@ -15,16 +15,15 @@ const uint8_t BAT_PIN       = A0;  // PF7/ADC7
 const uint8_t BAT_EN_PIN    = A1;  // PF6/ADC6
 const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
 
-const uint8_t RAK_RX_PIN    = 10;  // PB6/PCINT6/ADC13
-const uint8_t RAK_TX_PIN    = ;  // 
-
 float BatVolt, BatVoltPrev;
 volatile bool isAlarm;
 bool isPowerUp;
 const uint8_t batEnDly = 1, batSampDly = 1, batSampNum = 3;
-const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4;
 uint16_t minuteRead, minuteSend;
-const long tmr60000 = 60000, tmr100 = 100;
+const long tmr30000 = 60000, tmr100 = 100;
+
+const uint8_t RAK_RX_PIN    = 10;  // PB6/PCINT6/ADC13
+const uint8_t RAK_TX_PIN    = 5;   // PC6
 
 struct Conf {
   uint16_t read_t;
@@ -42,25 +41,24 @@ CayenneLPP lpp(51);
 
 void setup() {
   setPins();
-  rakSerial.begin(115200);
-  resSht();
+  rakSerial.begin(9600);
+  setPeripheral();
   analogReference(INTERNAL);
   loadConf();  
   flashLed();
-  setSht();   
+  setSht();  
   if (USBSTA >> VBUS & 1) {
     setUsb();
-  }  
-  readAll();
-  resRak();     
-  if (rakJoin()) {
-    uplink();  
-  } else {
-    if (!rakSleep()) {
-      resetMe;
-    }
-    delay(100);
-  }       
+  } 
+  delay(3000);        
+  digitalWrite(LED_PIN, LOW);
+  readAll();  
+  atRakJoinOtaa();  
+  atRakSleep();
+  delay(10000);
+  uplink();
+  delay(100);
+  digitalWrite(LED_PIN, HIGH);        
 }
 void loop() {  
   for (uint8_t slpCnt = 0; slpCnt < 4 ; slpCnt++) {   
@@ -93,6 +91,7 @@ void sleepAndWake() {
   detachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN));
 }
 void uplink() {
+  digitalWrite(LED_PIN, LOW);
   isAlarm = false;   
   minuteRead = 0;
   minuteSend = 0;  
@@ -105,15 +104,10 @@ void uplink() {
   //  isPowerUp = true;
   //  lpp.addAnalogOutput(30, 0);    
   //}
-  if (!rakWake()) {
-    resetMe();
-  }
-  if (!rakSend(lppGetBuffer())) {
-    resetMe();
-  }
-  if (!rakSleep()) {
-    resetMe();    
-  }
+  atRakWake();
+  atRakSend(lppGetBuffer());  
+  atRakSleep();
+  digitalWrite(LED_PIN, HIGH);  
 }
 void readAll() {  
   //readBatVolt();
@@ -174,68 +168,74 @@ void atRakClrSerial() {
     const char inChar = (char)rakSerial.read();           
   }    
 }
-bool rakWake() {
-  atRakClrSerial();
-  rakSerial.println(F("at+set_config=device:sleep:0"));
-  return rakResponse(atWake); 
+void atRakWake() {   
+  atRakClrSerial();  
+  rakSerial.println(F("at+sleep"));
+  String str;   
+  str = RakReadLine(tmr30000);    
+  if (!str.endsWith(F("8,0,0"))) {    
+    
+  }     
 }
-bool rakSleep() {
-  atRakClrSerial();
-  rakSerial.println(F("at+set_config=device:sleep:1"));
-  return rakResponse(atSleep); 
+void atRakSleep() {  
+  atRakClrSerial();     
+  rakSerial.println(F("at+sleep"));
+  String str;   
+  str = RakReadLine(tmr30000);  
+  if (!str.endsWith(F("OK"))) {
+    
+  }     
 }
-bool rakJoin() {
-  return rakResponse(atJoin);  
+void atRakJoinOtaa() {   
+  atRakClrSerial();  
+  rakSerial.println(F("at+join=otaa"));  
+  String str;
+  str = RakReadLine(tmr30000);     
+  if (!str.endsWith(F("OK"))) {    
+    
+  }  
+  str = RakReadLine(tmr30000);    
+  if (!str.endsWith(F("3,0,0"))) {    
+    
+  }  
 }
-bool rakSend(String str) {  
-  str = "at+send=lora:1:" + str;
+void atRakSend(String str) {   
+  str = "at+send=0,1," + str;
   atRakClrSerial();   
-  rakSerial.println(str);  
-  return rakResponse(atSend);    
+  rakSerial.println(str);
+  str = RakReadLine(tmr30000);    
+  if (!str.endsWith(F("OK"))) {    
+    
+  }
+  str = RakReadLine(tmr30000);    
+  if (!str.endsWith(F("2,0,0"))) {    
+    
+  }
+/* 
+  str = RakReadLine(tmr100);
+  if (str.endsWith(F("ff"))) {
+    str.replace("ff", "");
+    const uint8_t i = str.lastIndexOf(',');
+    str = str.substring(i + 1);    
+    lppDownlinkDec(str);
+    EEPROM.put(0, conf);
+  }
+*/       
 }
-bool rakResponse(const uint8_t atCommand) {
-  digitalWrite(LED_PIN, LOW);
+String RakReadLine(const long tmr) { 
   String str;
   unsigned long startMs = millis();  
-  while (millis() - startMs < tmr60000) {    
+  while (millis() - startMs < tmr) {    
     while (rakSerial.available()) {
       const char inChar = (char)rakSerial.read();
       str += inChar;
       if (inChar == '\n') {
-        str.trim();
-        if (atCommand == atWake) {
-          if (str.equalsIgnoreCase(F("Wake up."))) {
-            digitalWrite(LED_PIN, HIGH);
-            return true;
-          }          
-        } else if (atCommand == atSleep) {
-          if (str.equalsIgnoreCase(F("Go to Sleep."))) {
-            digitalWrite(LED_PIN, HIGH);
-            return true;
-          }          
-        } else if (atCommand == atJoin) {
-          if (str.equalsIgnoreCase(F("[LoRa]:Joined Successed!"))) {
-            digitalWrite(LED_PIN, HIGH);
-            return true;
-          } else if (str.equalsIgnoreCase(F("[LoRa]:Joined Failed!"))) {
-            digitalWrite(LED_PIN, HIGH);
-            return false;
-          }          
-        } else if (atCommand == atSend) {
-          if (str.equalsIgnoreCase(F("[LoRa]: Unconfirm data send OK"))) {
-            digitalWrite(LED_PIN, HIGH);
-            return true;
-          } else if (str.equalsIgnoreCase(F("Network not joined."))) {
-            digitalWrite(LED_PIN, HIGH);
-            return false;       
-          }          
-        }
-        str = "";        
+        str.trim();             
+        return str;
       }
-    }        
-  }
-  digitalWrite(LED_PIN, HIGH);  
-  return false;  
+    }    
+  }  
+  return str;  
 }
 String lppGetBuffer() {
   String str;
@@ -248,16 +248,6 @@ String lppGetBuffer() {
   }
   return str;
 }
-/* 
-  str = RakReadLine(tmr100);
-  if (str.endsWith(F("ff"))) {
-    str.replace("ff", "");
-    const uint8_t i = str.lastIndexOf(',');
-    str = str.substring(i + 1);    
-    lppDownlinkDec(str);
-    EEPROM.put(0, conf);
-  }
-*/    
 void lppDownlinkDec(String str) {
   char buf[6];
   str.substring(0, 2).toCharArray(buf, sizeof(buf));
@@ -300,24 +290,22 @@ void setPins() {
   pinMode(BAT_EN_PIN, OUTPUT);
   pinMode(VREF_EN_PIN, OUTPUT); 
     
-  digitalWrite(SHT_RES_PIN, LOW);
-  digitalWrite(RAK_RES_PIN, LOW);
+  digitalWrite(SHT_RES_PIN, HIGH);
+  digitalWrite(RAK_RES_PIN, HIGH);
   digitalWrite(LED_PIN, HIGH);
   digitalWrite(BAT_EN_PIN, HIGH);
   digitalWrite(VREF_EN_PIN, LOW);  
 }
-void resSht() {
-  delay(100);
-  digitalWrite(SHT_RES_PIN, HIGH);
-}
-void resRak() {
+void setPeripheral() {
+  digitalWrite(RAK_RES_PIN, LOW);
+  digitalWrite(SHT_RES_PIN, LOW);
   delay(100);
   digitalWrite(RAK_RES_PIN, HIGH);
+  digitalWrite(SHT_RES_PIN, HIGH);
 }
 void setUsb() {
   Serial.begin(115200);
-  while (!Serial); 
-  resRak(); 
+  while (!Serial);  
   String str;
   while (true) {   
     if (Serial.available()) {
