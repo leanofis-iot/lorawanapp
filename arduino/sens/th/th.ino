@@ -42,7 +42,7 @@ void setup() {
   setPeripheral();
   analogReference(INTERNAL);
   loadConf();  
-  delay(1000);
+  flashLed();
   setSht();  
   if (USBSTA >> VBUS & 1) {
     setUsb();
@@ -412,6 +412,14 @@ void setUsb() {
       Serial.print(chrSerial);   
     }      
   }    
+}
+void flashLed() {
+  for (uint8_t ii = 0; ii < 5; ii++) {  
+    digitalWrite(LED_PIN, LOW);
+    delay(100);
+    digitalWrite(LED_PIN, HIGH);
+    delay(100);
+  }
 }
 void wakeUp() {
   isAlarm = true;   
