@@ -19,9 +19,9 @@ float BatVolt, BatVoltPrev;
 volatile bool isAlarm;
 bool isPowerUp;
 const uint8_t batEnDly = 1, batSampDly = 1, batSampNum = 3;
-const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4;
+const uint8_t atReset = 1, atWake = 2, atSleep = 3, atJoin = 4, atSend = 5;
 uint16_t minuteRead, minuteSend;
-const long tmr60000 = 60000, tmr100 = 100;
+const long tmrMin7 = 480000, tmrSec60 = 60000, tmrMsec100 = 100;
 
 struct Conf {
   uint16_t read_t;
@@ -44,19 +44,23 @@ void setup() {
   analogReference(INTERNAL);
   loadConf();  
   flashLed();
-  setSht();   
+  setSht();    
   if (USBSTA >> VBUS & 1) {
     setUsb();
   }  
   readAll();
-  resRak();     
-  if (rakJoin()) {
-    uplink();  
-  } else {
-    if (!rakSleep()) {
-      resetMe;
-    }
-    delay(100);
+  if (!rakReset()) {
+    resetMe();      
+  }  
+  if (rakJoin()) {    
+    if (!rakSleep()) {      
+      resetMe();
+    }    
+    uplink();         
+  } else {       
+    if (!rakSleep()) {          
+      resetMe();
+    }    
   }       
 }
 void loop() {  
@@ -165,59 +169,70 @@ void loadConf() {
   //  conf.send_t = 5;
   //}  
 }
-void atRakClrSerial() {  
+void rakClear() {  
   delay(10);  
   while (rakSerial.available()) {
     const char inChar = (char)rakSerial.read();           
   }    
 }
+bool rakReset() {
+  delay(100);
+  digitalWrite(RAK_RES_PIN, HIGH);
+  return rakResponse(atReset, tmrSec60);
+}
 bool rakWake() {
-  atRakClrSerial();
+  rakClear();
   rakSerial.println(F("at+set_config=device:sleep:0"));
-  return rakResponse(atWake); 
+  return rakResponse(atWake, tmrSec60); 
 }
 bool rakSleep() {
-  atRakClrSerial();
+  rakClear();
   rakSerial.println(F("at+set_config=device:sleep:1"));
-  return rakResponse(atSleep); 
+  return rakResponse(atSleep, tmrSec60); 
 }
 bool rakJoin() {
-  return rakResponse(atJoin);  
+  rakClear();
+  return rakResponse(atJoin, tmrMin7);  
 }
 bool rakSend(String str) {  
   str = "at+send=lora:1:" + str;
-  atRakClrSerial();   
+  rakClear();   
   rakSerial.println(str);  
-  return rakResponse(atSend);    
+  return rakResponse(atSend, tmrSec60);    
 }
-bool rakResponse(const uint8_t atCommand) {
+bool rakResponse(const uint8_t atCommand, const long atTmr) {
   digitalWrite(LED_PIN, LOW);
   String str;
   unsigned long startMs = millis();  
-  while (millis() - startMs < tmr60000) {    
+  while (millis() - startMs < atTmr) {    
     while (rakSerial.available()) {
       const char inChar = (char)rakSerial.read();
       str += inChar;
       if (inChar == '\n') {
         str.trim();
-        if (atCommand == atWake) {
+        if (atCommand == atReset) {
+          if (str.equalsIgnoreCase(F("Initialization OK!"))) { ///////////////?????????????????????????
+            digitalWrite(LED_PIN, HIGH);
+            return true;
+          }  
+        } else if (atCommand == atWake) {
           if (str.equalsIgnoreCase(F("Wake up."))) {
             digitalWrite(LED_PIN, HIGH);
             return true;
           }          
-        } else if (atCommand == atSleep) {
-          if (str.equalsIgnoreCase(F("Go to Sleep."))) {
+        } else if (atCommand == atSleep) {          
+          if (str.equalsIgnoreCase(F("Go to Sleep."))) {            
             digitalWrite(LED_PIN, HIGH);
             return true;
           }          
-        } else if (atCommand == atJoin) {
-          if (str.equalsIgnoreCase(F("[LoRa]:Joined Successed!"))) {
+        } else if (atCommand == atJoin) {          
+          if (str.equalsIgnoreCase(F("[LoRa]:Joined Successed"))) {            
             digitalWrite(LED_PIN, HIGH);
             return true;
-          } else if (str.equalsIgnoreCase(F("[LoRa]:Joined Failed!"))) {
+          } else if (str.equalsIgnoreCase(F("[LoRa]:Joined Failed!"))) {            
             digitalWrite(LED_PIN, HIGH);
             return false;
-          }          
+          }                   
         } else if (atCommand == atSend) {
           if (str.equalsIgnoreCase(F("[LoRa]: Unconfirm data send OK"))) {
             digitalWrite(LED_PIN, HIGH);
@@ -230,7 +245,7 @@ bool rakResponse(const uint8_t atCommand) {
         str = "";        
       }
     }        
-  }
+  }  
   digitalWrite(LED_PIN, HIGH);  
   return false;  
 }
@@ -246,7 +261,7 @@ String lppGetBuffer() {
   return str;
 }
 /* 
-  str = RakReadLine(tmr100);
+  str = RakReadLine(tmrMsec100);
   if (str.endsWith(F("ff"))) {
     str.replace("ff", "");
     const uint8_t i = str.lastIndexOf(',');
@@ -307,14 +322,11 @@ void resSht() {
   delay(100);
   digitalWrite(SHT_RES_PIN, HIGH);
 }
-void resRak() {
-  delay(100);
-  digitalWrite(RAK_RES_PIN, HIGH);
-}
 void setUsb() {
   Serial.begin(115200);
   while (!Serial); 
-  resRak(); 
+  delay(100);
+  digitalWrite(RAK_RES_PIN, HIGH); 
   String str;
   while (true) {   
     if (Serial.available()) {
@@ -323,7 +335,7 @@ void setUsb() {
       if (chrUsb == '\n') {
         str.trim();       
         if (str.startsWith(F("at"))) {
-          atRakClrSerial();///////////////////////////////////////       
+          rakClear();///////////////////////////////////////       
           rakSerial.println(str);
         } else if (str.startsWith(F("read_t"))) {
           if (str.indexOf(F("=")) >= 0) {
