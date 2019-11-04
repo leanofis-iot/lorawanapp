@@ -53,6 +53,7 @@ void setup() {
     setUsb();
   }  
   readAll();
+  readAll();
   if (!rakReset()) {
     resetMe();      
   }  
