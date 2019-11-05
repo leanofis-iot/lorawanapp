@@ -22,9 +22,9 @@ const float rtd_coeff = 0.3851, rtd_r0 = 100, extRef = 2.5, r_ext = 2400;
 volatile bool isAlarm;
 bool isPowerUp;
 const uint8_t vrefEnDly = 20, digDly = 100, batEnDly = 1, batSampDly = 1, batSampNum = 3;
-const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4;
+const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4, atDr5 = 5;
 uint16_t minuteRead, minuteSend;
-const long tmrSec120 = 120000, tmrSec60 = 60000, tmrMsec100 = 100;
+const long tmrSec120 = 120000, tmrSec10 = 10000, tmrMsec100 = 100;
 
 struct Conf {
   uint16_t read_t;
@@ -54,19 +54,25 @@ void setup() {
   }  
   readAll();
   readAll();
-  if (rakJoin()) {    
+  if (rakJoin()) {
+    if (!rakDr5()) {
+      resetMe();     
+    }
     if (!rakSleep()) {      
       resetMe();
     }    
     uplink();         
-  } else {       
+  } else {
+    if (!rakDr5()) {
+      resetMe();     
+    }       
     if (!rakSleep()) {          
       resetMe();
     }    
   }       
 }
 void loop() {  
-  for (uint8_t slpCnt = 0; slpCnt < 4 ; slpCnt++) {   
+  for (uint8_t slpCnt = 0; slpCnt < 8 ; slpCnt++) {   
     sleepAndWake();
     if (isAlarm) {
       readAll();
@@ -240,12 +246,12 @@ void rakClear() {
 bool rakWake() {
   rakClear();
   rakSerial.println(F("at+set_config=device:sleep:0"));
-  return rakResponse(atWake, tmrSec60); 
+  return rakResponse(atWake, tmrSec10); 
 }
 bool rakSleep() {
   rakClear();
   rakSerial.println(F("at+set_config=device:sleep:1"));
-  return rakResponse(atSleep, tmrSec60); 
+  return rakResponse(atSleep, tmrSec10); 
 }
 bool rakJoin() {
   delay(100);
@@ -256,7 +262,12 @@ bool rakSend(String str) {
   str = "at+send=lora:1:" + str;
   rakClear();   
   rakSerial.println(str);  
-  return rakResponse(atSend, tmrSec60);    
+  return rakResponse(atSend, tmrSec10);    
+}
+bool rakDr5() {
+  rakClear();   
+  rakSerial.println(F("at+set_config=lora:dr:5"));  
+  return rakResponse(atDr5, tmrSec10);
 }
 bool rakResponse(const uint8_t atCommand, const long atTmr) {
   digitalWrite(LED_PIN, LOW);
@@ -293,7 +304,12 @@ bool rakResponse(const uint8_t atCommand, const long atTmr) {
           } else if (str.equalsIgnoreCase(F("Network not joined."))) {
             digitalWrite(LED_PIN, HIGH);
             return false;       
-          }          
+          }
+        } else if (atCommand == atDr5) {          
+          if (str.equalsIgnoreCase(F("OK"))) {            
+            digitalWrite(LED_PIN, HIGH);
+            return true;
+          }            
         }
         str = "";        
       }
@@ -374,8 +390,7 @@ void setPins() {
   pinMode(BAT_EN_PIN, OUTPUT);
   pinMode(VREF_EN_PIN, OUTPUT);
   pinMode(VOUT_EN_PIN, OUTPUT);
-  pinMode(ADS_CS_PIN, OUTPUT);
-  
+  pinMode(ADS_CS_PIN, OUTPUT);  
   digitalWrite(RAK_RES_PIN, LOW);
   digitalWrite(LED_PIN, HIGH);
   digitalWrite(BAT_EN_PIN, HIGH);

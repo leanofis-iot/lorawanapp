@@ -16,12 +16,12 @@ const uint8_t BAT_EN_PIN    = A1;  // PF6/ADC6
 const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
 
 float BatVolt, BatVoltPrev;
-volatile bool isAlarm;
+volatile bool isAlarm = false;
 bool isPowerUp;
 const uint8_t batEnDly = 1, batSampDly = 1, batSampNum = 3;
-const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4;
+const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4, atDr5 = 5;
 uint16_t minuteRead, minuteSend;
-const long tmrSec120 = 120000, tmrSec60 = 60000, tmrMsec100 = 100;
+const long tmrSec120 = 120000, tmrSec10 = 10000, tmrMsec100 = 100;
 
 struct Conf {
   uint16_t read_t;
@@ -49,19 +49,25 @@ void setup() {
     setUsb();
   }  
   readAll();
-  if (rakJoin()) {    
+  if (rakJoin()) {
+    if (!rakDr5()) {
+      resetMe();     
+    }    
     if (!rakSleep()) {      
       resetMe();
     }    
     uplink();         
-  } else {       
+  } else {
+    if (!rakDr5()) {
+      resetMe();     
+    }       
     if (!rakSleep()) {          
       resetMe();
     }    
   }   
 }
 void loop() {  
-  for (uint8_t slpCnt = 0; slpCnt < 4 ; slpCnt++) {   
+  for (uint8_t slpCnt = 0; slpCnt < 8 ; slpCnt++) {   
     sleepAndWake();
     if (isAlarm) {
       readAll();       
@@ -155,7 +161,7 @@ void setSht() {
   sht.writeAlertHigh(conf.alr_max[0] + conf.alr_max[0] * conf.alr_hys[0], conf.alr_max[0] - conf.alr_max[0] * conf.alr_hys[0], 
                     conf.alr_max[1] + conf.alr_max[1] * conf.alr_hys[1], conf.alr_max[1] - conf.alr_max[1] * conf.alr_hys[1]);
   sht.writeAlertLow(conf.alr_min[0] + conf.alr_min[0] * conf.alr_hys[0], conf.alr_min[0] - conf.alr_min[0] * conf.alr_hys[0], 
-                    conf.alr_min[1] + conf.alr_min[1] * conf.alr_hys[1], conf.alr_min[1] - conf.alr_min[1] * conf.alr_hys[1]);
+                    conf.alr_min[1] + conf.alr_min[1] * conf.alr_hys[1], conf.alr_min[1] - conf.alr_min[1] * conf.alr_hys[1]);  
 }
 void loadConf() {
   EEPROM.get(0, conf);
@@ -175,12 +181,12 @@ void rakClear() {
 bool rakWake() {
   rakClear();
   rakSerial.println(F("at+set_config=device:sleep:0"));
-  return rakResponse(atWake, tmrSec60); 
+  return rakResponse(atWake, tmrSec10); 
 }
 bool rakSleep() {
   rakClear();
   rakSerial.println(F("at+set_config=device:sleep:1"));
-  return rakResponse(atSleep, tmrSec60); 
+  return rakResponse(atSleep, tmrSec10); 
 }
 bool rakJoin() {
   delay(100);
@@ -191,7 +197,12 @@ bool rakSend(String str) {
   str = "at+send=lora:1:" + str;
   rakClear();   
   rakSerial.println(str);  
-  return rakResponse(atSend, tmrSec60);    
+  return rakResponse(atSend, tmrSec10);    
+}
+bool rakDr5() {
+  rakClear();   
+  rakSerial.println(F("at+set_config=lora:dr:5"));  
+  return rakResponse(atDr5, tmrSec10);
 }
 bool rakResponse(const uint8_t atCommand, const long atTmr) {
   digitalWrite(LED_PIN, LOW);
@@ -228,7 +239,12 @@ bool rakResponse(const uint8_t atCommand, const long atTmr) {
           } else if (str.equalsIgnoreCase(F("Network not joined."))) {
             digitalWrite(LED_PIN, HIGH);
             return false;       
-          }          
+          }
+        } else if (atCommand == atDr5) {          
+          if (str.equalsIgnoreCase(F("OK"))) {            
+            digitalWrite(LED_PIN, HIGH);
+            return true;
+          }            
         }
         str = "";        
       }
@@ -298,8 +314,7 @@ void setPins() {
   pinMode(LED_PIN, OUTPUT);  
   pinMode(BAT_PIN, INPUT);
   pinMode(BAT_EN_PIN, OUTPUT);
-  pinMode(VREF_EN_PIN, OUTPUT); 
-    
+  pinMode(VREF_EN_PIN, OUTPUT);    
   digitalWrite(SHT_RES_PIN, LOW);
   digitalWrite(RAK_RES_PIN, LOW);
   digitalWrite(LED_PIN, HIGH);
