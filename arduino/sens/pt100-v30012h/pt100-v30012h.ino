@@ -32,7 +32,8 @@ struct Conf {
   float bat_lo_v;       
   float alr_max[2];
   float alr_min[2];
-  float alr_hys[2];  
+  float alr_hys[2];
+  float cal_b[2];  
   uint8_t an_type[2];
   uint8_t dig_type[2];  
 };
@@ -97,6 +98,7 @@ void loop() {
   }    
 }
 void sleepAndWake() { 
+  EIFR = 255;
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.dig_type[ch]) {
       attachInterrupt(digitalPinToInterrupt(DIG_PIN[ch]), wakeUp, conf.dig_type[ch]);    
@@ -115,10 +117,10 @@ void uplink() {
   minuteRead = 0;
   minuteSend = 0;  
   lpp.reset();
-  //lpp.addAnalogInput(0, BatVolt); 
+  lpp.addAnalogInput(0, BatVolt); 
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     if (conf.an_type[ch]) {
-      lpp.addTemperature(ch + 1, Val[ch] - 4);      
+      lpp.addTemperature(ch + 1, Val[ch]);      
     } 
   } 
   for (uint8_t ch = 0; ch < 2 ; ch++) {
@@ -141,7 +143,7 @@ void uplink() {
   }
 }
 void readAll() {  
-  //readBatVolt();
+  readBatVolt();
   //calcBatAlarm();
   digitalWrite(VREF_EN_PIN, LOW);
   delay(vrefEnDly);
@@ -164,7 +166,7 @@ void calcR() {
   R = (In * r_ext) / (extRef - In);  
 }
 void calcVal(const uint8_t ch) {     
-  Val[ch] = (R - rtd_r0) / rtd_coeff;    
+  Val[ch] = (R - rtd_r0) / rtd_coeff + conf.cal_b[ch];    
 }
 void calcValAlarm(const uint8_t ch) {  
   if (Val[ch] <= conf.alr_min[ch] - conf.alr_min[ch] * conf.alr_hys[ch]) {
@@ -200,7 +202,7 @@ void readBatVolt() {
     BatVolt += samples[jj];
   }
   BatVolt /= batSampNum;   
-  BatVolt = ( BatVolt / 1023 ) * 3.6;  
+  BatVolt = ( BatVolt / 1023 ) * 2.56 * 2;  
 }
 void calcBatAlarm() {
   if (BatVolt <= conf.bat_lo_v) {
@@ -368,12 +370,16 @@ void lppDownlinkDec(String str) {
     } else if (confKey == 9) {
       conf.alr_hys[1] = confValue;
     } else if (confKey == 10) {
-      conf.an_type[0] = confValue;
+      conf.cal_b[0] = confValue;
     } else if (confKey == 11) {
-      conf.an_type[1] = confValue;         
+      conf.cal_b[1] = confValue;
     } else if (confKey == 12) {
-      conf.dig_type[0] = confValue;      
+      conf.an_type[0] = confValue;
     } else if (confKey == 13) {
+      conf.an_type[1] = confValue;         
+    } else if (confKey == 14) {
+      conf.dig_type[0] = confValue;      
+    } else if (confKey == 15) {
       conf.dig_type[1] = confValue;     
     }
     EEPROM.put(0, conf);    
@@ -502,6 +508,26 @@ void setUsb() {
           } else {
             Serial.print(F("OK"));
             Serial.println(conf.alr_hys[1]);
+          }
+        } else if (str.startsWith(F("cal_b_1"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("cal_b_1="), "");
+            conf.cal_b[0] = str.toFloat();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.cal_b[0]);
+          }
+        } else if (str.startsWith(F("cal_b_2"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("cal_b_2="), "");
+            conf.cal_b[1] = str.toFloat();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.cal_b[1]);
           }
         } else if (str.startsWith(F("an_type_1"))) {
           if (str.indexOf(F("=")) >= 0) {

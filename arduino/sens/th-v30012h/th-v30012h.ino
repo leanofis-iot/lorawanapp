@@ -37,7 +37,7 @@ ClosedCube_SHT31D sht;
 AltSoftSerial rakSerial;
 CayenneLPP lpp(51);
 
-void setup() {
+void setup() {  
   setPins();
   rakSerial.begin(9600);
   resSht();
@@ -90,9 +90,10 @@ void loop() {
     return;
   }    
 }
-void sleepAndWake() {  
+void sleepAndWake() { 
+  EIFR = 255;  
   attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUp, CHANGE);  
-  isAlarm = false;
+  isAlarm = false; 
   LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF
   detachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN));
 }
@@ -102,7 +103,7 @@ void uplink() {
   minuteSend = 0;  
   SHT31D result = sht.periodicFetchData();  
   lpp.reset();
-  //lpp.addAnalogInput(0, BatVolt); 
+  lpp.addAnalogInput(0, BatVolt); 
   lpp.addTemperature(1, result.t);
   lpp.addRelativeHumidity(2, result.rh);
   //if (!isPowerUp) {
@@ -120,7 +121,7 @@ void uplink() {
   }
 }
 void readAll() {  
-  //readBatVolt();
+  readBatVolt();
   //calcBatAlarm();  
 }
 void readBatVolt() {
@@ -139,7 +140,7 @@ void readBatVolt() {
     BatVolt += samples[jj];
   }
   BatVolt /= batSampNum;   
-  BatVolt = ( BatVolt / 1023 ) * 3.6;  
+  BatVolt = ( BatVolt / 1023 ) * 2.56 * 2;  
 }
 void calcBatAlarm() {
   if (BatVolt <= conf.bat_lo_v) {
@@ -155,13 +156,13 @@ void calcBatAlarm() {
 }
 void setSht() {
   Wire.begin();
-  sht.begin(0x44);
-  sht.clearAll();
+  sht.begin(0x44);  
   sht.periodicStart(SHT3XD_REPEATABILITY_LOW, SHT3XD_FREQUENCY_1HZ);
   sht.writeAlertHigh(conf.alr_max[0] + conf.alr_max[0] * conf.alr_hys[0], conf.alr_max[0] - conf.alr_max[0] * conf.alr_hys[0], 
                     conf.alr_max[1] + conf.alr_max[1] * conf.alr_hys[1], conf.alr_max[1] - conf.alr_max[1] * conf.alr_hys[1]);
   sht.writeAlertLow(conf.alr_min[0] + conf.alr_min[0] * conf.alr_hys[0], conf.alr_min[0] - conf.alr_min[0] * conf.alr_hys[0], 
-                    conf.alr_min[1] + conf.alr_min[1] * conf.alr_hys[1], conf.alr_min[1] - conf.alr_min[1] * conf.alr_hys[1]);  
+                    conf.alr_min[1] + conf.alr_min[1] * conf.alr_hys[1], conf.alr_min[1] - conf.alr_min[1] * conf.alr_hys[1]);
+  sht.clearAll();     
 }
 void loadConf() {
   EEPROM.get(0, conf);
