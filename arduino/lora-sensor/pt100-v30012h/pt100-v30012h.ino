@@ -22,7 +22,7 @@ const float rtd_coeff = 0.3851, rtd_r0 = 100, extRef = 2.5, r_ext = 2400;
 volatile bool isAlarm;
 bool isPowerUp;
 const uint8_t vrefEnDly = 20, digDly = 100, batEnDly = 1, batSampDly = 1, batSampNum = 3;
-const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4, atDr5 = 5;
+const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4, atDr2 = 5;
 uint16_t minuteRead, minuteSend;
 const long tmrSec120 = 120000, tmrSec10 = 10000, tmrMsec100 = 100;
 
@@ -56,7 +56,7 @@ void setup() {
   readAll();
   readAll();
   if (rakJoin()) {
-    if (!rakDr5()) {
+    if (!rakDr2()) {
       resetMe();     
     }
     if (!rakSleep()) {      
@@ -64,7 +64,7 @@ void setup() {
     }    
     uplink();         
   } else {
-    if (!rakDr5()) {
+    if (!rakDr2()) {
       resetMe();     
     }       
     if (!rakSleep()) {          
@@ -266,10 +266,10 @@ bool rakSend(String str) {
   rakSerial.println(str);  
   return rakResponse(atSend, tmrSec10);    
 }
-bool rakDr5() {
+bool rakDr2() {
   rakClear();   
-  rakSerial.println(F("at+set_config=lora:dr:5"));  
-  return rakResponse(atDr5, tmrSec10);
+  rakSerial.println(F("at+set_config=lora:dr:2"));  
+  return rakResponse(atDr2, tmrSec10);
 }
 bool rakResponse(const uint8_t atCommand, const long atTmr) {
   digitalWrite(LED_PIN, LOW);
@@ -307,7 +307,7 @@ bool rakResponse(const uint8_t atCommand, const long atTmr) {
             digitalWrite(LED_PIN, HIGH);
             return false;       
           }
-        } else if (atCommand == atDr5) {          
+        } else if (atCommand == atDr2) {          
           if (str.equalsIgnoreCase(F("OK"))) {            
             digitalWrite(LED_PIN, HIGH);
             return true;
