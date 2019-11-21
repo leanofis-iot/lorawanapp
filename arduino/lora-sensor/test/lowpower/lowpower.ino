@@ -1,6 +1,3 @@
-//#include <avr/interrupt.h>
-//#include <avr/sleep.h>
-
 #include <avr/wdt.h>
 #include <avr/power.h>
 #include "LowPower.h"
@@ -32,94 +29,20 @@ CayenneLPP lpp(51);
 void setup() {
   setPins();
   rakSerial.begin(9600);
-  setSht();
-  for (uint8_t ii = 0; ii < 3 ; ii++) { 
-    digitalWrite(LED_PIN, LOW);
-    delay(200);
-    digitalWrite(LED_PIN, HIGH);
-    delay(200);              
-  }  
-  /*  
-  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-  cli();  
-  sleep_enable();
-  sei();
-  sleep_cpu();
-  sleep_disable();  
-  sei();
-  */
-
-  /*
-  ADCSRA &= ~(1 << ADEN);
-  power_adc_disable();
-  power_usart0_disable();
-  power_spi_disable();
-  power_twi_disable();
-  power_timer0_disable();
-  power_timer1_disable();
-  power_timer2_disable();
-  power_timer3_disable();
-  //power_timer4_disable();
-  power_usart1_disable();
-  power_usb_disable();
-  power_all_disable();
-  ACSR &= ~(1<<ACIE); //disable interrupts on AC
-  ACSR &= 1<<ACD; //switch on the AC
-  */
+  delay(1);
+  //resSht();
+  //analogReference(INTERNAL);
+  setSht();  
+  pwrDownUsb();
+  pwrDownRef();
+  delay(1000);   
   
-
-  /*
-  sleep_enable();     // set the sleep enable bit
-  set_sleep_mode(SLEEP_MODE_PWR_DOWN);  
-  sleep_cpu();        // put the arduino into sleep mode
-  sleep_disable();       
-  */
-  //USBDevice.detach();
-  USBCON |= _BV(FRZCLK);  //freeze USB clock
-  PLLCSR &= ~_BV(PLLE);   // turn off USB PLL
-  USBCON &= ~_BV(USBE);   // disable USB
-  USBCON &= ~_BV(OTGPADE);
-  USBCON &= ~_BV(VBUSTE);
-  UHWCON &= ~_BV(UVREGE);
-
-  PRR0 |= _BV(PRTWI);
-  PRR0 |= _BV(PRTIM0);
-  PRR0 |= _BV(PRTIM1);
-  PRR0 |= _BV(PRSPI);
-  //PRR0 |= _BV(PRADC);
-
-  PRR1 |= _BV(PRUSB);
-  //PRR1 |= _BV(PRTIM4);
-  PRR1 |= _BV(PRTIM3);
-  PRR1 |= _BV(PRUSART1);
-  
-  
-  LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF 
-  
-  //LowPower.idle(SLEEP_FOREVER, ADC_OFF, TIMER4_OFF, TIMER3_OFF, TIMER1_OFF, 
-  //      TIMER0_OFF, SPI_OFF, USART1_OFF, TWI_OFF, USB_OFF);  
+  LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF); 
 }
 void loop() {  
   
 }
-void setPins() {
-  /*
-  pinMode(7, INPUT);
-  pinMode(11, INPUT);
-  pinMode(2, INPUT);
-  pinMode(3, INPUT);
-  pinMode(5, INPUT);
-  pinMode(6, INPUT);
-  pinMode(8, INPUT);
-  pinMode(9, INPUT);
-  pinMode(10, INPUT);
-  pinMode(12, INPUT);
-  pinMode(13, INPUT);
-  pinMode(A3, INPUT);
-  pinMode(A4, INPUT);
-  pinMode(A5, INPUT);
-  */
-  
+void setPins() {  
   pinMode(SHT_ALR_PIN, INPUT);
   pinMode(SHT_RES_PIN, OUTPUT); 
   pinMode(RAK_RES_PIN, INPUT);
@@ -141,5 +64,24 @@ void setSht() {
                     conf.alr_max[1] + conf.alr_max[1] * conf.alr_hys[1], conf.alr_max[1] - conf.alr_max[1] * conf.alr_hys[1]);
   sht.writeAlertLow(conf.alr_min[0] + conf.alr_min[0] * conf.alr_hys[0], conf.alr_min[0] - conf.alr_min[0] * conf.alr_hys[0], 
                     conf.alr_min[1] + conf.alr_min[1] * conf.alr_hys[1], conf.alr_min[1] - conf.alr_min[1] * conf.alr_hys[1]);
-  sht.clearAll();     
+  sht.clearAll();  
+  delay(100);    
+}
+void resSht() {
+  delay(100);
+  //digitalWrite(SHT_RES_PIN, HIGH);
+  delay(100);
+}
+void pwrDownUsb() {
+  USBDevice.detach();
+  USBCON |= _BV(FRZCLK);  //freeze USB clock
+  PLLCSR &= ~_BV(PLLE);   // turn off USB PLL
+  USBCON &= ~_BV(USBE);   // disable USB
+  USBCON &= ~_BV(OTGPADE);
+  USBCON &= ~_BV(VBUSTE);
+  UHWCON &= ~_BV(UVREGE);
+}
+void pwrDownRef() {
+  ACSR &= ~_BV(ACIE);
+  ACSR |= _BV(ACD); 
 }

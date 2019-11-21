@@ -41,17 +41,18 @@ CayenneLPP lpp(51);
 
 void setup() {  
   setPins();
+  loadConf();   
+  setSht(); // never use delay() before this
   rakSerial.begin(9600);
-  resSht();
-  //analogReference(INTERNAL);
-  loadConf();  
-  flashLed();
-  setSht();    
+  flashLed();  
+  //resSht();
+  //analogReference(INTERNAL); // disable before sleep enable wake
   if (USBSTA >> VBUS & 1) {
     setUsb();
   } 
   pwrDownUsb(); 
   readAll();
+  pwrDownRef();
   if (rakJoin()) {
     if (!rakDr2()) {
       resetMe();     
@@ -131,7 +132,8 @@ void readAll() {
   //calcBatAlarm();  
 }
 void readBatVolt() {
-  //power_adc_enable();  
+  //power_adc_enable(); 
+  pwrUpRef(); 
   digitalWrite(BAT_EN_PIN, LOW);
   delay(batEnDly);
   uint16_t samples[batSampNum];
@@ -140,7 +142,8 @@ void readBatVolt() {
     delay(batSampDly);
   } 
   digitalWrite(BAT_EN_PIN, HIGH); 
-  //power_adc_disable(); 
+  //power_adc_disable();
+  pwrDownRef(); 
   BatVolt = 0;
   for (uint8_t jj = 0; jj < batSampNum; jj++) {
     BatVolt += samples[jj];
@@ -168,7 +171,8 @@ void setSht() {
                     conf.alr_max[1] + conf.alr_max[1] * conf.alr_hys[1], conf.alr_max[1] - conf.alr_max[1] * conf.alr_hys[1]);
   sht.writeAlertLow(conf.alr_min[0] + conf.alr_min[0] * conf.alr_hys[0], conf.alr_min[0] - conf.alr_min[0] * conf.alr_hys[0], 
                     conf.alr_min[1] + conf.alr_min[1] * conf.alr_hys[1], conf.alr_min[1] - conf.alr_min[1] * conf.alr_hys[1]);
-  sht.clearAll();     
+  sht.clearAll(); 
+  delay(100);    
 }
 void loadConf() {
   EEPROM.get(0, conf);
@@ -323,7 +327,7 @@ void setPins() {
   pinMode(BAT_PIN, INPUT);
   pinMode(BAT_EN_PIN, OUTPUT);
   pinMode(VREF_EN_PIN, OUTPUT);    
-  digitalWrite(SHT_RES_PIN, LOW);
+  digitalWrite(SHT_RES_PIN, HIGH);
   digitalWrite(RAK_RES_PIN, LOW);
   digitalWrite(LED_PIN, HIGH);
   digitalWrite(BAT_EN_PIN, HIGH);
@@ -450,12 +454,21 @@ void setUsb() {
   }    
 }
 void pwrDownUsb() {
+  USBDevice.detach();
   USBCON |= _BV(FRZCLK);  //freeze USB clock
   PLLCSR &= ~_BV(PLLE);   // turn off USB PLL
   USBCON &= ~_BV(USBE);   // disable USB
   USBCON &= ~_BV(OTGPADE);
   USBCON &= ~_BV(VBUSTE);
   UHWCON &= ~_BV(UVREGE);
+}
+void pwrDownRef() {
+  ACSR &= ~_BV(ACIE);
+  ACSR |= _BV(ACD);
+}
+void pwrUpRef() {
+  ACSR &= ~_BV(ACIE);
+  ACSR &= ~_BV(ACD);
 }
 void flashLed() {
   for (uint8_t ii = 0; ii < 5; ii++) {  
