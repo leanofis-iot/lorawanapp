@@ -21,7 +21,7 @@ float BatVolt, BatVoltPrev;
 volatile bool isAlarm = false;
 bool isPowerUp;
 const uint8_t batEnDly = 1, batSampDly = 1, batSampNum = 3;
-const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4, atDr2 = 5;
+const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4, atDr0 = 5;
 uint16_t minuteRead, minuteSend;
 const long tmrSec120 = 120000, tmrSec10 = 10000, tmrMsec100 = 100;
 
@@ -44,9 +44,8 @@ void setup() {
   loadConf();   
   setSht(); // never use delay() before this
   rakSerial.begin(9600);
-  flashLed();  
-  //resSht();
-  //analogReference(INTERNAL); // disable before sleep enable wake
+  analogReference(INTERNAL);
+  flashLed();   
   if (USBSTA >> VBUS & 1) {
     setUsb();
   } 
@@ -54,7 +53,7 @@ void setup() {
   readAll();
   pwrDownRef();
   if (rakJoin()) {
-    if (!rakDr2()) {
+    if (!rakDr0()) {
       resetMe();     
     }    
     if (!rakSleep()) {      
@@ -62,7 +61,7 @@ void setup() {
     }    
     uplink();         
   } else {
-    if (!rakDr2()) {
+    if (!rakDr0()) {
       resetMe();     
     }       
     if (!rakSleep()) {          
@@ -90,9 +89,7 @@ void loop() {
    // }    
   //}    
   if (minuteSend >= conf.send_t) {
-    //
     readAll();
-    //
     uplink();
     return;
   }    
@@ -133,7 +130,7 @@ void readAll() {
 }
 void readBatVolt() {
   //power_adc_enable(); 
-  pwrUpRef(); 
+  //pwrUpRef(); 
   digitalWrite(BAT_EN_PIN, LOW);
   delay(batEnDly);
   uint16_t samples[batSampNum];
@@ -211,10 +208,10 @@ bool rakSend(String str) {
   rakSerial.println(str);  
   return rakResponse(atSend, tmrSec10);    
 }
-bool rakDr2() {
+bool rakDr0() {
   rakClear();   
-  rakSerial.println(F("at+set_config=lora:dr:2"));  
-  return rakResponse(atDr2, tmrSec10);
+  rakSerial.println(F("at+set_config=lora:dr:0"));  
+  return rakResponse(atDr0, tmrSec10);
 }
 bool rakResponse(const uint8_t atCommand, const long atTmr) {
   digitalWrite(LED_PIN, LOW);
@@ -252,7 +249,7 @@ bool rakResponse(const uint8_t atCommand, const long atTmr) {
             digitalWrite(LED_PIN, HIGH);
             return false;       
           }
-        } else if (atCommand == atDr2) {          
+        } else if (atCommand == atDr0) {          
           if (str.equalsIgnoreCase(F("OK"))) {            
             digitalWrite(LED_PIN, HIGH);
             return true;
@@ -332,10 +329,6 @@ void setPins() {
   digitalWrite(LED_PIN, HIGH);
   digitalWrite(BAT_EN_PIN, HIGH);
   digitalWrite(VREF_EN_PIN, LOW);  
-}
-void resSht() {
-  delay(100);
-  digitalWrite(SHT_RES_PIN, HIGH);
 }
 void setUsb() {
   Serial.begin(115200);

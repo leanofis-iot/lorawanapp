@@ -28,11 +28,12 @@ CayenneLPP lpp(51);
 
 void setup() {
   setPins();
+  setSht();
   rakSerial.begin(9600);
-  delay(1);
+  delay(10);
   //resSht();
   //analogReference(INTERNAL);
-  setSht();  
+    
   pwrDownUsb();
   pwrDownRef();
   delay(1000);   
