@@ -40,16 +40,21 @@ CayenneLPP lpp(51);
 void setup() {  
   setPins();
   rakSerial.begin(9600);
-  resSht();
+  //resSht();
   analogReference(INTERNAL);
   loadConf();  
   flashLed();
-  setSht();    
-  if (USBSTA >> VBUS & 1) {
-    setUsb();
-  }  
+  //setSht();    
+  //if (USBSTA >> VBUS & 1) {
+  //  setUsb();
+  //}
+
+  Serial.begin(115200);
+  while (!Serial);
+    
   readAll();
   if (rakJoin()) {
+    Serial.println("join true");
     if (!rakDr2()) {
       resetMe();     
     }    
@@ -58,6 +63,7 @@ void setup() {
     }    
     uplink();         
   } else {
+    Serial.println("join false");
     if (!rakDr2()) {
       resetMe();     
     }       
@@ -104,11 +110,13 @@ void uplink() {
   isAlarm = false;   
   minuteRead = 0;
   minuteSend = 0;  
-  SHT31D result = sht.periodicFetchData();  
+  //SHT31D result = sht.periodicFetchData();  
   lpp.reset();
-  lpp.addAnalogInput(0, BatVolt); 
-  lpp.addTemperature(1, result.t);
-  lpp.addRelativeHumidity(2, result.rh);
+  //lpp.addAnalogInput(0, BatVolt); 
+  //lpp.addTemperature(1, result.t);
+  //lpp.addRelativeHumidity(2, result.rh);
+  lpp.addTemperature(1, 66);
+  lpp.addRelativeHumidity(2, 77);
   //if (!isPowerUp) {
   //  isPowerUp = true;
   //  lpp.addAnalogOutput(30, 0);    
@@ -161,10 +169,8 @@ void setSht() {
   Wire.begin();
   sht.begin(0x44);  
   sht.periodicStart(SHT3XD_REPEATABILITY_LOW, SHT3XD_FREQUENCY_1HZ);
-  sht.writeAlertHigh(conf.alr_max[0] + conf.alr_max[0] * conf.alr_hys[0], conf.alr_max[0] - conf.alr_max[0] * conf.alr_hys[0], 
-                    conf.alr_max[1] + conf.alr_max[1] * conf.alr_hys[1], conf.alr_max[1] - conf.alr_max[1] * conf.alr_hys[1]);
-  sht.writeAlertLow(conf.alr_min[0] + conf.alr_min[0] * conf.alr_hys[0], conf.alr_min[0] - conf.alr_min[0] * conf.alr_hys[0], 
-                    conf.alr_min[1] + conf.alr_min[1] * conf.alr_hys[1], conf.alr_min[1] - conf.alr_min[1] * conf.alr_hys[1]);
+  sht.writeAlertHigh(conf.alr_max[0] + conf.alr_max[0] * conf.alr_hys[0], conf.alr_max[0] - conf.alr_max[0] * conf.alr_hys[0], conf.alr_max[1] + conf.alr_max[1] * conf.alr_hys[1], conf.alr_max[1] - conf.alr_max[1] * conf.alr_hys[1]);
+  sht.writeAlertLow(conf.alr_min[0] + conf.alr_min[0] * conf.alr_hys[0], conf.alr_min[0] - conf.alr_min[0] * conf.alr_hys[0],  conf.alr_min[1] + conf.alr_min[1] * conf.alr_hys[1], conf.alr_min[1] - conf.alr_min[1] * conf.alr_hys[1]);
   sht.clearAll();     
 }
 void loadConf() {
@@ -177,7 +183,7 @@ void loadConf() {
   //}  
 }
 void rakClear() {  
-  delay(10);  
+  delay(1000);  
   while (rakSerial.available()) {
     const char inChar = (char)rakSerial.read();           
   }    
@@ -219,37 +225,46 @@ bool rakResponse(const uint8_t atCommand, const long atTmr) {
       if (inChar == '\n') {
         str.trim();
         if (atCommand == atWake) {
-          if (str.equalsIgnoreCase(F("Wake up."))) {
+          if (str.equalsIgnoreCase(F("Wake up"))) {
+            Serial.println("Wake up");
             digitalWrite(LED_PIN, HIGH);
             return true;
           }          
         } else if (atCommand == atSleep) {          
-          if (str.equalsIgnoreCase(F("Go to Sleep."))) {            
+          if (str.equalsIgnoreCase(F("Go to Sleep"))) { 
+            Serial.println("Go to Sleep");           
             digitalWrite(LED_PIN, HIGH);
             return true;
           }          
         } else if (atCommand == atJoin) {          
-          if (str.equalsIgnoreCase(F("[LoRa]:Joined Successed!"))) {            
+          if (str.equalsIgnoreCase(F("[LoRa]:Join Success"))) {
+            Serial.println("Join success");
             digitalWrite(LED_PIN, HIGH);
             return true;
-          } else if (str.equalsIgnoreCase(F("[LoRa]:Joined Failed!"))) {            
+          } else if (str.equalsIgnoreCase(F("ERROR: RUI_AT_LORA_INFO_STATUS_JOIN_FAIL 99"))) {            
+            Serial.println("Join fail");
             digitalWrite(LED_PIN, HIGH);
             return false;
           }                   
         } else if (atCommand == atSend) {
-          if (str.equalsIgnoreCase(F("[LoRa]: Unconfirm data send OK"))) {
+          if (str.equalsIgnoreCase(F("[LoRa]: RUI_MCPS_UNCONFIRMED send success"))) {
+            Serial.println("Send success");
             digitalWrite(LED_PIN, HIGH);
             return true;
-          } else if (str.equalsIgnoreCase(F("Network not joined."))) {
+          } else if (str.equalsIgnoreCase(F("ERROR: RUI_LORA_STATUS_NO_NETWORK_JOINED 86"))) {
+            Serial.println("Send fail");
             digitalWrite(LED_PIN, HIGH);
             return false;       
           }
         } else if (atCommand == atDr2) {          
-          if (str.equalsIgnoreCase(F("OK"))) {            
+          if (str.equalsIgnoreCase(F("LoRa configure DR2 success"))) {
+            Serial.println("DR2 success");            
             digitalWrite(LED_PIN, HIGH);
             return true;
           }            
         }
+        Serial.println("------");
+        Serial.println(str);
         str = "";        
       }
     }        
@@ -319,7 +334,7 @@ void setPins() {
   pinMode(BAT_PIN, INPUT);
   pinMode(BAT_EN_PIN, OUTPUT);
   pinMode(VREF_EN_PIN, OUTPUT);    
-  digitalWrite(SHT_RES_PIN, LOW);
+  digitalWrite(SHT_RES_PIN, HIGH);
   digitalWrite(RAK_RES_PIN, LOW);
   digitalWrite(LED_PIN, HIGH);
   digitalWrite(BAT_EN_PIN, HIGH);
