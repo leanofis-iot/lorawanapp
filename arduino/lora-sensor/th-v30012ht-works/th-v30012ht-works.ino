@@ -11,6 +11,8 @@ const uint8_t SHT_ALR_PIN   = 0;  // PD2/RXD1/INT2
 const uint8_t SHT_RES_PIN   = 1;  // PD3/TXD1/INT3
 const uint8_t RAK_RES_PIN   = 4;   // PD4/ADC8
 const uint8_t LED_PIN       = 10;  // PB6/ADC13/PCINT6
+const uint8_t ALT_TX_PIN    = 5;   // PC6
+const uint8_t ALT_RX_PIN    = 13;  // PC7
 const uint8_t BAT_PIN       = A0;  // PF7/ADC7
 const uint8_t BAT_EN_PIN    = A1;  // PF6/ADC6
 const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
@@ -42,9 +44,10 @@ void setup() {
   rakSerial.begin(9600);
   //resSht();
   analogReference(INTERNAL);
-  loadConf();
+  loadConf(); 
   setSht(); // never use delay() before this 
-  flashLed();   
+  flashLed();  
+   
   if (USBSTA >> VBUS & 1) {
     setUsb();
   } 
@@ -161,13 +164,14 @@ void calcBatAlarm() {
 }
 void setSht() {
   Wire.begin();
-  sht.begin(0x44); 
+  sht.begin(0x44);  
   sht.periodicStart(SHT3XD_REPEATABILITY_LOW, SHT3XD_FREQUENCY_1HZ);
   sht.writeAlertHigh(conf.alr_max[0] + conf.alr_max[0] * conf.alr_hys[0], conf.alr_max[0] - conf.alr_max[0] * conf.alr_hys[0], 
                     conf.alr_max[1] + conf.alr_max[1] * conf.alr_hys[1], conf.alr_max[1] - conf.alr_max[1] * conf.alr_hys[1]);
   sht.writeAlertLow(conf.alr_min[0] + conf.alr_min[0] * conf.alr_hys[0], conf.alr_min[0] - conf.alr_min[0] * conf.alr_hys[0], 
                     conf.alr_min[1] + conf.alr_min[1] * conf.alr_hys[1], conf.alr_min[1] - conf.alr_min[1] * conf.alr_hys[1]);
-  sht.clearAll();       
+  sht.clearAll();
+  //SHT31D result = sht.periodicFetchData();       
 }
 void loadConf() {
   EEPROM.get(0, conf);
@@ -196,7 +200,8 @@ bool rakSleep() {
 }
 bool rakJoin() {
   delay(100);
-  digitalWrite(RAK_RES_PIN, HIGH);
+  //digitalWrite(RAK_RES_PIN, HIGH);
+  pinMode(RAK_RES_PIN, INPUT);
   return rakResponse(atJoin, tmrSec120);  
 }
 bool rakSend(String str) {  
@@ -328,7 +333,6 @@ void setPins() {
   digitalWrite(VREF_EN_PIN, LOW);  
 }
 void resSht() {
-  digitalWrite(SHT_RES_PIN, LOW);
   delay(100);
   digitalWrite(SHT_RES_PIN, HIGH);
 }
@@ -336,7 +340,8 @@ void setUsb() {
   Serial.begin(115200);
   while (!Serial); 
   delay(100);
-  digitalWrite(RAK_RES_PIN, HIGH); 
+  //digitalWrite(RAK_RES_PIN, HIGH);
+  pinMode(RAK_RES_PIN, INPUT); 
   String str;
   while (true) {   
     if (Serial.available()) {
@@ -447,7 +452,6 @@ void setUsb() {
     }      
   }    
 }
-/*
 void pwrDownUsb() {
   USBDevice.detach();
   USBCON |= _BV(FRZCLK);  //freeze USB clock
@@ -465,7 +469,6 @@ void pwrUpRef() {
   ACSR &= ~_BV(ACIE);
   ACSR &= ~_BV(ACD);
 }
-*/
 void flashLed() {
   for (uint8_t ii = 0; ii < 5; ii++) {  
     digitalWrite(LED_PIN, LOW);

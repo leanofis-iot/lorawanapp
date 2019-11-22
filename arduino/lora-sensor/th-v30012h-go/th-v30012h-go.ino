@@ -19,7 +19,7 @@ float BatVolt, BatVoltPrev;
 volatile bool isAlarm = false;
 bool isPowerUp;
 const uint8_t batEnDly = 1, batSampDly = 1, batSampNum = 3;
-const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4, atDr5 = 5;
+const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4, atDr2 = 5;
 uint16_t minuteRead, minuteSend;
 const long tmrSec120 = 120000, tmrSec10 = 10000, tmrMsec100 = 100;
 
@@ -40,19 +40,17 @@ CayenneLPP lpp(51);
 void setup() {  
   setPins();
   rakSerial.begin(9600);
-  //resSht();
+  resSht();
   analogReference(INTERNAL);
-  loadConf();
-  setSht(); // never use delay() before this 
-  flashLed();   
+  loadConf();  
+  flashLed();
+  setSht();    
   if (USBSTA >> VBUS & 1) {
     setUsb();
-  } 
-  //pwrDownUsb(); 
+  }  
   readAll();
-  //pwrDownRef();
   if (rakJoin()) {
-    if (!rakDr5()) {
+    if (!rakDr2()) {
       resetMe();     
     }    
     if (!rakSleep()) {      
@@ -60,7 +58,7 @@ void setup() {
     }    
     uplink();         
   } else {
-    if (!rakDr5()) {
+    if (!rakDr2()) {
       resetMe();     
     }       
     if (!rakSleep()) {          
@@ -88,12 +86,14 @@ void loop() {
    // }    
   //}    
   if (minuteSend >= conf.send_t) {
+    //
     readAll();
+    //
     uplink();
     return;
   }    
 }
-void sleepAndWake() {   
+void sleepAndWake() { 
   EIFR = 255;  
   attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUp, CHANGE);  
   isAlarm = false; 
@@ -106,7 +106,7 @@ void uplink() {
   minuteSend = 0;  
   SHT31D result = sht.periodicFetchData();  
   lpp.reset();
-  //lpp.addAnalogInput(0, BatVolt); 
+  lpp.addAnalogInput(0, BatVolt); 
   lpp.addTemperature(1, result.t);
   lpp.addRelativeHumidity(2, result.rh);
   //if (!isPowerUp) {
@@ -128,8 +128,7 @@ void readAll() {
   //calcBatAlarm();  
 }
 void readBatVolt() {
-  power_adc_enable(); 
-  //pwrUpRef(); 
+  power_adc_enable();  
   digitalWrite(BAT_EN_PIN, LOW);
   delay(batEnDly);
   uint16_t samples[batSampNum];
@@ -138,8 +137,7 @@ void readBatVolt() {
     delay(batSampDly);
   } 
   digitalWrite(BAT_EN_PIN, HIGH); 
-  power_adc_disable();
-  //pwrDownRef(); 
+  power_adc_disable(); 
   BatVolt = 0;
   for (uint8_t jj = 0; jj < batSampNum; jj++) {
     BatVolt += samples[jj];
@@ -161,13 +159,13 @@ void calcBatAlarm() {
 }
 void setSht() {
   Wire.begin();
-  sht.begin(0x44); 
+  sht.begin(0x44);  
   sht.periodicStart(SHT3XD_REPEATABILITY_LOW, SHT3XD_FREQUENCY_1HZ);
   sht.writeAlertHigh(conf.alr_max[0] + conf.alr_max[0] * conf.alr_hys[0], conf.alr_max[0] - conf.alr_max[0] * conf.alr_hys[0], 
                     conf.alr_max[1] + conf.alr_max[1] * conf.alr_hys[1], conf.alr_max[1] - conf.alr_max[1] * conf.alr_hys[1]);
   sht.writeAlertLow(conf.alr_min[0] + conf.alr_min[0] * conf.alr_hys[0], conf.alr_min[0] - conf.alr_min[0] * conf.alr_hys[0], 
                     conf.alr_min[1] + conf.alr_min[1] * conf.alr_hys[1], conf.alr_min[1] - conf.alr_min[1] * conf.alr_hys[1]);
-  sht.clearAll();       
+  sht.clearAll();     
 }
 void loadConf() {
   EEPROM.get(0, conf);
@@ -205,10 +203,10 @@ bool rakSend(String str) {
   rakSerial.println(str);  
   return rakResponse(atSend, tmrSec10);    
 }
-bool rakDr5() {
+bool rakDr2() {
   rakClear();   
-  rakSerial.println(F("at+set_config=lora:dr:5"));  
-  return rakResponse(atDr5, tmrSec10);
+  rakSerial.println(F("at+set_config=lora:dr:2"));  
+  return rakResponse(atDr2, tmrSec10);
 }
 bool rakResponse(const uint8_t atCommand, const long atTmr) {
   digitalWrite(LED_PIN, LOW);
@@ -221,32 +219,32 @@ bool rakResponse(const uint8_t atCommand, const long atTmr) {
       if (inChar == '\n') {
         str.trim();
         if (atCommand == atWake) {
-          if (str.equalsIgnoreCase(F("Wake up"))) {
+          if (str.equalsIgnoreCase(F("Wake up."))) {
             digitalWrite(LED_PIN, HIGH);
             return true;
           }          
         } else if (atCommand == atSleep) {          
-          if (str.equalsIgnoreCase(F("OK"))) {            
+          if (str.equalsIgnoreCase(F("Go to Sleep."))) {            
             digitalWrite(LED_PIN, HIGH);
             return true;
           }          
         } else if (atCommand == atJoin) {          
-          if (str.equalsIgnoreCase(F("OK"))) {            
+          if (str.equalsIgnoreCase(F("[LoRa]:Joined Successed!"))) {            
             digitalWrite(LED_PIN, HIGH);
             return true;
-          } else if (str.endsWith(F("99"))) {            
+          } else if (str.equalsIgnoreCase(F("[LoRa]:Joined Failed!"))) {            
             digitalWrite(LED_PIN, HIGH);
             return false;
           }                   
         } else if (atCommand == atSend) {
-          if (str.equalsIgnoreCase(F("OK"))) {
+          if (str.equalsIgnoreCase(F("[LoRa]: Unconfirm data send OK"))) {
             digitalWrite(LED_PIN, HIGH);
             return true;
-          } else if (str.endsWith(F("86"))) {
+          } else if (str.equalsIgnoreCase(F("Network not joined."))) {
             digitalWrite(LED_PIN, HIGH);
             return false;       
           }
-        } else if (atCommand == atDr5) {          
+        } else if (atCommand == atDr2) {          
           if (str.equalsIgnoreCase(F("OK"))) {            
             digitalWrite(LED_PIN, HIGH);
             return true;
@@ -321,14 +319,13 @@ void setPins() {
   pinMode(BAT_PIN, INPUT);
   pinMode(BAT_EN_PIN, OUTPUT);
   pinMode(VREF_EN_PIN, OUTPUT);    
-  digitalWrite(SHT_RES_PIN, HIGH);
+  digitalWrite(SHT_RES_PIN, LOW);
   digitalWrite(RAK_RES_PIN, LOW);
   digitalWrite(LED_PIN, HIGH);
   digitalWrite(BAT_EN_PIN, HIGH);
   digitalWrite(VREF_EN_PIN, LOW);  
 }
 void resSht() {
-  digitalWrite(SHT_RES_PIN, LOW);
   delay(100);
   digitalWrite(SHT_RES_PIN, HIGH);
 }
@@ -447,25 +444,6 @@ void setUsb() {
     }      
   }    
 }
-/*
-void pwrDownUsb() {
-  USBDevice.detach();
-  USBCON |= _BV(FRZCLK);  //freeze USB clock
-  PLLCSR &= ~_BV(PLLE);   // turn off USB PLL
-  USBCON &= ~_BV(USBE);   // disable USB
-  USBCON &= ~_BV(OTGPADE);
-  USBCON &= ~_BV(VBUSTE);
-  UHWCON &= ~_BV(UVREGE);
-}
-void pwrDownRef() {
-  ACSR &= ~_BV(ACIE);
-  ACSR |= _BV(ACD);
-}
-void pwrUpRef() {
-  ACSR &= ~_BV(ACIE);
-  ACSR &= ~_BV(ACD);
-}
-*/
 void flashLed() {
   for (uint8_t ii = 0; ii < 5; ii++) {  
     digitalWrite(LED_PIN, LOW);
