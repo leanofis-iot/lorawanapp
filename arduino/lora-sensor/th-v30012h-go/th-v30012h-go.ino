@@ -45,14 +45,12 @@ void setup() {
   loadConf();  
   flashLed();
   setSht();    
-  //if (USBSTA >> VBUS & 1) {
-  //  setUsb();
-  //}
-
-  Serial.begin(115200);
-  while (!Serial);
-    
-  readAll();
+  if (USBSTA >> VBUS & 1) {
+    setUsb();
+  }
+  //Serial.begin(115200);
+  //while (!Serial);
+  pwrDownUsb();
   if (rakJoin()) {
     if (!rakDr2()) {
       resetMe();     
@@ -74,48 +72,34 @@ void setup() {
 void loop() {  
   for (uint8_t slpCnt = 0; slpCnt < 8 ; slpCnt++) {   
     sleepAndWake();
-    if (isAlarm) {
-      readAll();       
+    if (isAlarm) {      
       uplink();
       return;      
     }              
   }    
-  //minuteRead++;
   minuteSend++;  
-  //if (minuteRead >= conf.read_t) {
-  //  minuteRead = 0;    
-  //  readAll();
-  //  if (isAlarm) {      
-  //    uplink();
-  //    return;      
-   // }    
-  //}    
   if (minuteSend >= conf.send_t) {
-    //
-    readAll();
-    //
     uplink();
     return;
   }    
 }
 void sleepAndWake() { 
   EIFR = 255;  
-  //attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUp, CHANGE);  
+  attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUp, CHANGE);  
   isAlarm = false; 
   LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); ///??????????????????????????????? BOD_OFF
-  //detachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN));
+  detachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN));
 }
 void uplink() {
   isAlarm = false;   
   minuteRead = 0;
-  minuteSend = 0;  
+  minuteSend = 0; 
+  readBat(); 
   SHT31D result = sht.periodicFetchData();  
-  lpp.reset();
-  //lpp.addAnalogInput(0, BatVolt); 
+  lpp.reset();  
   lpp.addTemperature(1, result.t);
   lpp.addRelativeHumidity(2, result.rh);
-  //lpp.addTemperature(1, 66);
-  //lpp.addRelativeHumidity(2, 77);
+  lpp.addAnalogInput(20, BatVolt);  
   //if (!isPowerUp) {
   //  isPowerUp = true;
   //  lpp.addAnalogOutput(30, 0);    
@@ -130,12 +114,11 @@ void uplink() {
     resetMe();    
   }
 }
-void readAll() {  
+void readBat() {  
   readBatVolt();
   //calcBatAlarm();  
 }
 void readBatVolt() {
-  power_adc_enable();  
   digitalWrite(BAT_EN_PIN, LOW);
   delay(batEnDly);
   uint16_t samples[batSampNum];
@@ -144,7 +127,8 @@ void readBatVolt() {
     delay(batSampDly);
   } 
   digitalWrite(BAT_EN_PIN, HIGH); 
-  power_adc_disable(); 
+  pwrDownAdc();
+  pwrDownRef(); 
   BatVolt = 0;
   for (uint8_t jj = 0; jj < batSampNum; jj++) {
     BatVolt += samples[jj];
@@ -167,9 +151,11 @@ void calcBatAlarm() {
 void setSht() {
   Wire.begin();
   sht.begin(0x44);  
-  sht.periodicStart(SHT3XD_REPEATABILITY_LOW, SHT3XD_FREQUENCY_1HZ);
+  //sht.periodicStart(SHT3XD_REPEATABILITY_LOW, SHT3XD_FREQUENCY_1HZ);
+  sht.periodicStart(SHT3XD_REPEATABILITY_LOW, SHT3XD_FREQUENCY_HZ5);
   sht.writeAlertHigh(conf.alr_max[0] + conf.alr_max[0] * conf.alr_hys[0], conf.alr_max[0] - conf.alr_max[0] * conf.alr_hys[0], conf.alr_max[1] + conf.alr_max[1] * conf.alr_hys[1], conf.alr_max[1] - conf.alr_max[1] * conf.alr_hys[1]);
   sht.writeAlertLow(conf.alr_min[0] + conf.alr_min[0] * conf.alr_hys[0], conf.alr_min[0] - conf.alr_min[0] * conf.alr_hys[0],  conf.alr_min[1] + conf.alr_min[1] * conf.alr_hys[1], conf.alr_min[1] - conf.alr_min[1] * conf.alr_hys[1]);
+  SHT31D result = sht.periodicFetchData();
   sht.clearAll();     
 }
 void loadConf() {
@@ -198,10 +184,12 @@ bool rakSleep() {
   return rakResponse(atSleep, tmrSec10); 
 }
 bool rakJoin() {
+  digitalWrite(LED_PIN, LOW);
   resRak();
   return rakResponse(atJoin, tmrSec120);  
 }
-bool rakSend(String str) {  
+bool rakSend(String str) {
+  digitalWrite(LED_PIN, LOW);  
   str = "at+send=lora:1:" + str;
   rakClear();   
   rakSerial.println(str);  
@@ -213,7 +201,6 @@ bool rakDr2() {
   return rakResponse(atDr2, tmrSec10);
 }
 bool rakResponse(const uint8_t atCommand, const long atTmr) {
-  digitalWrite(LED_PIN, LOW);
   String str;
   unsigned long startMs = millis();  
   while (millis() - startMs < atTmr) {    
@@ -222,17 +209,15 @@ bool rakResponse(const uint8_t atCommand, const long atTmr) {
       str += inChar;
       if (inChar == '\n') {
         str.trim();
-        Serial.print("...");
-        Serial.println(str);
+        //Serial.print("...");
+        //Serial.println(str);
         if (atCommand == atWake) {
           if (str.equalsIgnoreCase(F("Wake up"))) {
-            digitalWrite(LED_PIN, HIGH);
             return true;
           }          
         } else if (atCommand == atSleep) {          
           //if (str.equalsIgnoreCase(F("Go to Sleep"))) { 
           if (str.equalsIgnoreCase(F("OK"))) {
-            digitalWrite(LED_PIN, HIGH);
             return true;
           }          
         } else if (atCommand == atJoin) {          
@@ -257,8 +242,7 @@ bool rakResponse(const uint8_t atCommand, const long atTmr) {
           }
         } else if (atCommand == atDr2) {
           //if (str.equalsIgnoreCase(F("LoRa configure DR2 success"))) {          
-          if (str.equalsIgnoreCase(F("OK"))) {
-            digitalWrite(LED_PIN, HIGH);
+          if (str.equalsIgnoreCase(F("OK"))) {            
             return true;
           }            
         }
@@ -466,6 +450,22 @@ void flashLed() {
     digitalWrite(LED_PIN, HIGH);
     delay(100);
   }
+}
+void pwrDownUsb() {
+  USBDevice.detach();
+  USBCON |= _BV(FRZCLK);  //freeze USB clock
+  PLLCSR &= ~_BV(PLLE);   // turn off USB PLL
+  USBCON &= ~_BV(USBE);   // disable USB
+  USBCON &= ~_BV(OTGPADE);
+  USBCON &= ~_BV(VBUSTE);
+  UHWCON &= ~_BV(UVREGE);
+}
+void pwrDownAdc() {
+  ADCSRA &= ~_BV(ADEN);
+}
+void pwrDownRef() {
+  ACSR &= ~_BV(ACIE);
+  ACSR |= _BV(ACD);
 }
 void wakeUp() {
   isAlarm = true;   
