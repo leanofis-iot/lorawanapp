@@ -1,12 +1,14 @@
 #include <EEPROM.h>
 
 struct Conf {
-  const uint16_t read_t = 1;
-  const uint16_t send_t = 2;
-  const float bat_lo_v = 3;       
-  const float alr_max[2] = {40, 90};
-  const float alr_min[2] = {10, 20};
-  const float alr_hys[2] = {0.01, 0.01};    
+  const uint16_t read_p = 1;
+  const uint16_t send_p = 10;
+  const float alr_lo_t = 5;
+  const float alr_hi_t = 55;
+  const float alr_hys_t = 1;
+  const float alr_lo_h = 20;
+  const float alr_hi_h = 80;
+  const float alr_hys_h = 1;      
 };
 
 Conf conf;

@@ -1,5 +1,4 @@
 #include <avr/wdt.h>
-#include <avr/power.h>
 #include "LowPower.h"
 #include <AltSoftSerial.h>
 #include <EEPROM.h>
@@ -15,21 +14,23 @@ const uint8_t BAT_PIN       = A0;  // PF7/ADC7
 const uint8_t BAT_EN_PIN    = A1;  // PF6/ADC6
 const uint8_t VREF_EN_PIN   = A2;  // PF5/ADC5
 
-float BatVolt, BatVoltPrev;
+float BatVolt;
 volatile bool isAlarm = false;
 bool isPowerUp;
 const uint8_t batEnDly = 1, batSampDly = 1, batSampNum = 3;
-const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4, atDr5 = 5;
-uint16_t minuteRead, minuteSend;
+const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4, atDr2 = 5;
+uint16_t minuteSend;
 const long tmrSec120 = 120000, tmrSec10 = 10000, tmrMsec100 = 100;
 
 struct Conf {
-  uint16_t read_t;
-  uint16_t send_t;
-  float bat_lo_v;       
-  float alr_max[2];
-  float alr_min[2];
-  float alr_hys[2];    
+  uint16_t read_p;
+  uint16_t send_p;
+  float alr_lo_t;
+  float alr_hi_t;
+  float alr_hys_t;
+  float alr_lo_h;
+  float alr_hi_h;
+  float alr_hys_h;      
 };
 
 Conf conf;
@@ -40,27 +41,26 @@ CayenneLPP lpp(51);
 void setup() {  
   setPins();
   rakSerial.begin(9600);
-  //resSht();
+  resSht();
   analogReference(INTERNAL);
-  loadConf();
-  setSht(); // never use delay() before this 
-  flashLed();   
+  loadConf();  
+  flashLed();
+  setSht();    
   if (USBSTA >> VBUS & 1) {
     setUsb();
-  } 
-  //pwrDownUsb(); 
-  readAll();
-  //pwrDownRef();
+  }
+  pwrDownUsb();
   if (rakJoin()) {
-    if (!rakDr5()) {
+    if (!rakDr2()) {
       resetMe();     
     }    
     if (!rakSleep()) {      
       resetMe();
-    }    
+    }
+    delay(1000);    
     uplink();         
   } else {
-    if (!rakDr5()) {
+    if (!rakDr2()) {
       resetMe();     
     }       
     if (!rakSleep()) {          
@@ -71,29 +71,18 @@ void setup() {
 void loop() {  
   for (uint8_t slpCnt = 0; slpCnt < 8 ; slpCnt++) {   
     sleepAndWake();
-    if (isAlarm) {
-      readAll();       
+    if (isAlarm) {      
       uplink();
       return;      
     }              
   }    
-  //minuteRead++;
   minuteSend++;  
-  //if (minuteRead >= conf.read_t) {
-  //  minuteRead = 0;    
-  //  readAll();
-  //  if (isAlarm) {      
-  //    uplink();
-  //    return;      
-   // }    
-  //}    
-  if (minuteSend >= conf.send_t) {
-    readAll();
+  if (minuteSend >= conf.send_p) {
     uplink();
     return;
   }    
 }
-void sleepAndWake() {   
+void sleepAndWake() { 
   EIFR = 255;  
   attachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN), wakeUp, CHANGE);  
   isAlarm = false; 
@@ -101,14 +90,14 @@ void sleepAndWake() {
   detachInterrupt(digitalPinToInterrupt(SHT_ALR_PIN));
 }
 void uplink() {
-  isAlarm = false;   
-  minuteRead = 0;
-  minuteSend = 0;  
+  isAlarm = false;  
+  minuteSend = 0; 
+  readBattery(); 
   SHT31D result = sht.periodicFetchData();  
-  lpp.reset();
-  //lpp.addAnalogInput(0, BatVolt); 
+  lpp.reset();  
   lpp.addTemperature(1, result.t);
   lpp.addRelativeHumidity(2, result.rh);
+  lpp.addAnalogInput(20, BatVolt);  
   //if (!isPowerUp) {
   //  isPowerUp = true;
   //  lpp.addAnalogOutput(30, 0);    
@@ -123,13 +112,7 @@ void uplink() {
     resetMe();    
   }
 }
-void readAll() {  
-  readBatVolt();
-  //calcBatAlarm();  
-}
-void readBatVolt() {
-  power_adc_enable(); 
-  //pwrUpRef(); 
+void readBattery() {  
   digitalWrite(BAT_EN_PIN, LOW);
   delay(batEnDly);
   uint16_t samples[batSampNum];
@@ -138,8 +121,8 @@ void readBatVolt() {
     delay(batSampDly);
   } 
   digitalWrite(BAT_EN_PIN, HIGH); 
-  power_adc_disable();
-  //pwrDownRef(); 
+  pwrDownAdc();
+  pwrDownRef(); 
   BatVolt = 0;
   for (uint8_t jj = 0; jj < batSampNum; jj++) {
     BatVolt += samples[jj];
@@ -147,39 +130,23 @@ void readBatVolt() {
   BatVolt /= batSampNum;   
   BatVolt = ( BatVolt / 1023 ) * 2.56 * 2;  
 }
-void calcBatAlarm() {
-  if (BatVolt <= conf.bat_lo_v) {
-    if (BatVoltPrev > conf.bat_lo_v) {
-      isAlarm = true;
-    }
-  } else {
-    if (BatVoltPrev <= conf.bat_lo_v) {
-      isAlarm = true;
-    }
-  }
-  BatVoltPrev = BatVolt;
-}
 void setSht() {
   Wire.begin();
-  sht.begin(0x44); 
-  sht.periodicStart(SHT3XD_REPEATABILITY_LOW, SHT3XD_FREQUENCY_1HZ);
-  sht.writeAlertHigh(conf.alr_max[0] + conf.alr_max[0] * conf.alr_hys[0], conf.alr_max[0] - conf.alr_max[0] * conf.alr_hys[0], 
-                    conf.alr_max[1] + conf.alr_max[1] * conf.alr_hys[1], conf.alr_max[1] - conf.alr_max[1] * conf.alr_hys[1]);
-  sht.writeAlertLow(conf.alr_min[0] + conf.alr_min[0] * conf.alr_hys[0], conf.alr_min[0] - conf.alr_min[0] * conf.alr_hys[0], 
-                    conf.alr_min[1] + conf.alr_min[1] * conf.alr_hys[1], conf.alr_min[1] - conf.alr_min[1] * conf.alr_hys[1]);
-  sht.clearAll();       
+  sht.begin(0x44);  
+  sht.periodicStart(SHT3XD_REPEATABILITY_LOW, SHT3XD_FREQUENCY_HZ5);
+  sht.writeAlertHigh(conf.alr_hi_t, conf.alr_hi_t - conf.alr_hys_t, conf.alr_hi_h, conf.alr_hi_h - conf.alr_hys_h);
+  sht.writeAlertLow(conf.alr_lo_t + conf.alr_hys_t, conf.alr_lo_t,  conf.alr_lo_h + conf.alr_hys_h, conf.alr_lo_h);
+  SHT31D result = sht.periodicFetchData();
+  sht.clearAll();     
 }
 void loadConf() {
   EEPROM.get(0, conf);
-  if (conf.read_t < 1) {
-    conf.read_t = 1; 
-  }
-  //if (conf.send_t < 5) {
-  //  conf.send_t = 5;
+  conf.send_p = conf.send_p * 0.8;
+  //if (conf.send_p < 15) {
+  //  conf.send_p = 15;
   //}  
 }
 void rakClear() {  
-  delay(10);  
   while (rakSerial.available()) {
     const char inChar = (char)rakSerial.read();           
   }    
@@ -195,23 +162,23 @@ bool rakSleep() {
   return rakResponse(atSleep, tmrSec10); 
 }
 bool rakJoin() {
-  delay(100);
-  digitalWrite(RAK_RES_PIN, HIGH);
+  digitalWrite(LED_PIN, LOW);
+  resRak();
   return rakResponse(atJoin, tmrSec120);  
 }
-bool rakSend(String str) {  
+bool rakSend(String str) {
+  digitalWrite(LED_PIN, LOW);  
   str = "at+send=lora:1:" + str;
   rakClear();   
   rakSerial.println(str);  
   return rakResponse(atSend, tmrSec10);    
 }
-bool rakDr5() {
+bool rakDr2() {
   rakClear();   
-  rakSerial.println(F("at+set_config=lora:dr:5"));  
-  return rakResponse(atDr5, tmrSec10);
+  rakSerial.println(F("at+set_config=lora:dr:2"));  
+  return rakResponse(atDr2, tmrSec10);
 }
 bool rakResponse(const uint8_t atCommand, const long atTmr) {
-  digitalWrite(LED_PIN, LOW);
   String str;
   unsigned long startMs = millis();  
   while (millis() - startMs < atTmr) {    
@@ -222,19 +189,17 @@ bool rakResponse(const uint8_t atCommand, const long atTmr) {
         str.trim();
         if (atCommand == atWake) {
           if (str.equalsIgnoreCase(F("Wake up"))) {
-            digitalWrite(LED_PIN, HIGH);
             return true;
           }          
         } else if (atCommand == atSleep) {          
-          if (str.equalsIgnoreCase(F("OK"))) {            
-            digitalWrite(LED_PIN, HIGH);
+          if (str.equalsIgnoreCase(F("OK"))) {
             return true;
           }          
         } else if (atCommand == atJoin) {          
-          if (str.equalsIgnoreCase(F("OK"))) {            
+          if (str.equalsIgnoreCase(F("OK"))) {
             digitalWrite(LED_PIN, HIGH);
             return true;
-          } else if (str.endsWith(F("99"))) {            
+          } else if (str.endsWith(F("99"))) {
             digitalWrite(LED_PIN, HIGH);
             return false;
           }                   
@@ -246,9 +211,8 @@ bool rakResponse(const uint8_t atCommand, const long atTmr) {
             digitalWrite(LED_PIN, HIGH);
             return false;       
           }
-        } else if (atCommand == atDr5) {          
+        } else if (atCommand == atDr2) {
           if (str.equalsIgnoreCase(F("OK"))) {            
-            digitalWrite(LED_PIN, HIGH);
             return true;
           }            
         }
@@ -290,24 +254,20 @@ void lppDownlinkDec(String str) {
   const uint16_t confValue = str.substring(0, str.length() - 2).toInt();
   const uint8_t digOutValue = strtol(buf, NULL, 0);
   if (downCh == 30) {    
-    if (confKey == 1) {
-      conf.read_t = confValue;      
-    } else if (confKey == 2) {
-      conf.send_t = confValue;       
+    if (confKey == 2) {
+      conf.send_p = confValue;       
     } else if (confKey == 3) {
-      conf.bat_lo_v = confValue;          
+      conf.alr_lo_t = confValue;      
     } else if (confKey == 4) {
-      conf.alr_max[0] = confValue;      
+      conf.alr_hi_t = confValue;      
     } else if (confKey == 5) {
-      conf.alr_max[1] = confValue;      
+      conf.alr_hys_t = confValue;      
     } else if (confKey == 6) {
-      conf.alr_min[0] = confValue;      
+      conf.alr_lo_h = confValue;
     } else if (confKey == 7) {
-      conf.alr_min[1] = confValue;
+      conf.alr_hi_h = confValue;
     } else if (confKey == 8) {
-      conf.alr_hys[0] = confValue;
-    } else if (confKey == 9) {
-      conf.alr_hys[1] = confValue;     
+      conf.alr_hys_h = confValue;     
     }
     EEPROM.put(0, conf);    
     resetMe();  
@@ -321,22 +281,16 @@ void setPins() {
   pinMode(BAT_PIN, INPUT);
   pinMode(BAT_EN_PIN, OUTPUT);
   pinMode(VREF_EN_PIN, OUTPUT);    
-  digitalWrite(SHT_RES_PIN, HIGH);
+  digitalWrite(SHT_RES_PIN, LOW);
   digitalWrite(RAK_RES_PIN, LOW);
   digitalWrite(LED_PIN, HIGH);
   digitalWrite(BAT_EN_PIN, HIGH);
   digitalWrite(VREF_EN_PIN, LOW);  
 }
-void resSht() {
-  digitalWrite(SHT_RES_PIN, LOW);
-  delay(100);
-  digitalWrite(SHT_RES_PIN, HIGH);
-}
 void setUsb() {
   Serial.begin(115200);
   while (!Serial); 
-  delay(100);
-  digitalWrite(RAK_RES_PIN, HIGH); 
+  resRak(); 
   String str;
   while (true) {   
     if (Serial.available()) {
@@ -345,97 +299,77 @@ void setUsb() {
       if (chrUsb == '\n') {
         str.trim();       
         if (str.startsWith(F("at"))) {
-          rakClear();///////////////////////////////////////       
-          rakSerial.println(str);
-        } else if (str.startsWith(F("read_t"))) {
+          rakClear();       
+          rakSerial.println(str);        
+        } else if (str.startsWith(F("send_p"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("read_t="), "");
-            conf.read_t = str.toInt();
+            str.replace(F("send_p="), "");
+            conf.send_p = str.toInt();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.read_t);
-          } 
-        } else if (str.startsWith(F("send_t"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("send_t="), "");
-            conf.send_t = str.toInt();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.send_t);
-          }             
-        } else if (str.startsWith(F("bat_lo_v"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("bat_lo_v="), "");
-            conf.bat_lo_v = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.bat_lo_v);
-          }          
-        } else if (str.startsWith(F("alr_max_1"))) {
-          if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("alr_max_1="), "");
-            conf.alr_max[0] = str.toFloat();
-            EEPROM.put(0, conf);
-            Serial.println(F("OK"));
-          } else {
-            Serial.print(F("OK"));
-            Serial.println(conf.alr_max[0]);
+            Serial.println(conf.send_p);
           }
-        } else if (str.startsWith(F("alr_max_2"))) {
+        } else if (str.startsWith(F("alr_lo_t"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("alr_max_2="), "");
-            conf.alr_max[1] = str.toFloat();
+            str.replace(F("alr_lo_t="), "");
+            conf.alr_lo_t = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.alr_max[1]);
-          } 
-        } else if (str.startsWith(F("alr_min_1"))) {
+            Serial.println(conf.alr_lo_t);
+          }              
+        } else if (str.startsWith(F("alr_hi_t"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("alr_min_1="), "");
-            conf.alr_min[0] = str.toFloat();
+            str.replace(F("alr_hi_t="), "");
+            conf.alr_hi_t = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.alr_min[0]);
+            Serial.println(conf.alr_hi_t);
           }
-        } else if (str.startsWith(F("alr_min_2"))) {
+        } else if (str.startsWith(F("alr_hys_t"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("alr_min_2="), "");
-            conf.alr_min[1] = str.toFloat();
+            str.replace(F("alr_hys_t="), "");
+            conf.alr_hys_t = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.alr_min[1]);
+            Serial.println(conf.alr_hys_t);
           }
-        } else if (str.startsWith(F("alr_hys_1"))) {
+        } else if (str.startsWith(F("alr_lo_h"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("alr_hys_1="), "");
-            conf.alr_hys[0] = str.toFloat();
+            str.replace(F("alr_lo_h="), "");
+            conf.alr_lo_h = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.alr_hys[0]);
-          } 
-        } else if (str.startsWith(F("alr_hys_2"))) {
+            Serial.println(conf.alr_lo_h);
+          }   
+        } else if (str.startsWith(F("alr_hi_h"))) {
           if (str.indexOf(F("=")) >= 0) {
-            str.replace(F("alr_hys_2="), "");
-            conf.alr_hys[1] = str.toFloat();
+            str.replace(F("alr_hi_h="), "");
+            conf.alr_hi_h = str.toFloat();
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {
             Serial.print(F("OK"));
-            Serial.println(conf.alr_hys[1]);
+            Serial.println(conf.alr_hi_h);
+          }              
+        } else if (str.startsWith(F("alr_hys_h"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("alr_hys_h="), "");
+            conf.alr_hys_h = str.toFloat();
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.alr_hys_h);
           }                            
         }
         str = "";        
@@ -447,7 +381,22 @@ void setUsb() {
     }      
   }    
 }
-/*
+void flashLed() {
+  for (uint8_t ii = 0; ii < 5; ii++) {  
+    digitalWrite(LED_PIN, LOW);
+    delay(100);
+    digitalWrite(LED_PIN, HIGH);
+    delay(100);
+  }
+}
+void resSht() {
+  delay(100);
+  digitalWrite(SHT_RES_PIN, HIGH);
+}
+void resRak() {
+  delay(100);
+  digitalWrite(RAK_RES_PIN, HIGH);
+}
 void pwrDownUsb() {
   USBDevice.detach();
   USBCON |= _BV(FRZCLK);  //freeze USB clock
@@ -457,22 +406,12 @@ void pwrDownUsb() {
   USBCON &= ~_BV(VBUSTE);
   UHWCON &= ~_BV(UVREGE);
 }
+void pwrDownAdc() {
+  ADCSRA &= ~_BV(ADEN);
+}
 void pwrDownRef() {
   ACSR &= ~_BV(ACIE);
   ACSR |= _BV(ACD);
-}
-void pwrUpRef() {
-  ACSR &= ~_BV(ACIE);
-  ACSR &= ~_BV(ACD);
-}
-*/
-void flashLed() {
-  for (uint8_t ii = 0; ii < 5; ii++) {  
-    digitalWrite(LED_PIN, LOW);
-    delay(100);
-    digitalWrite(LED_PIN, HIGH);
-    delay(100);
-  }
 }
 void wakeUp() {
   isAlarm = true;   
