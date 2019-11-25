@@ -169,17 +169,17 @@ void calcVal(const uint8_t ch) {
   Val[ch] = (R - rtd_r0) / rtd_coeff + conf.cal_b[ch];    
 }
 void calcValAlarm(const uint8_t ch) {  
-  if (Val[ch] <= conf.alr_min[ch] - conf.alr_min[ch] * conf.alr_hys[ch]) {
+  if (Val[ch] <= conf.alr_min[ch]) {
     if (hysRegionPrev[ch] > 2) {
       isAlarm = true;
     }
     hysRegionPrev[ch] = 1;  
-  } else if ((Val[ch] >= conf.alr_min[ch] + conf.alr_min[ch] * conf.alr_hys[ch]) && (Val[ch] <= conf.alr_max[ch] - conf.alr_max[ch] * conf.alr_hys[ch])) {
+  } else if ((Val[ch] >= conf.alr_min[ch] + conf.alr_hys[ch]) && (Val[ch] <= conf.alr_max[ch] - conf.alr_hys[ch])) {
     if (hysRegionPrev[ch] < 2 || hysRegionPrev[ch] > 4) {
       isAlarm = true;
     }
     hysRegionPrev[ch] = 3; 
-  } else if (Val[ch] >= conf.alr_max[ch] + conf.alr_max[ch] * conf.alr_hys[ch]) {
+  } else if (Val[ch] >= conf.alr_max[ch]) {
     if (hysRegionPrev[ch] < 4) {
       isAlarm = true;
     }
@@ -207,7 +207,6 @@ void readBattery() {
 void setAds() {
   ads1118.begin();
   ads1118.setSamplingRate(ads1118.RATE_250SPS);  
-  ads1118.disablePullup(); 
   ads1118.setFullScaleRange(ads1118.FSR_0256); 
 }
 void adjAds(const uint8_t ch) {
@@ -337,29 +336,29 @@ void lppDownlinkDec(String str) {
       conf.read_p = confValue;      
     } else if (confKey == 2) {
       conf.send_p = confValue;              
-    } else if (confKey == 4) {
+    } else if (confKey == 3) {
       conf.alr_max[0] = confValue;      
-    } else if (confKey == 5) {
+    } else if (confKey == 4) {
       conf.alr_max[1] = confValue;      
-    } else if (confKey == 6) {
+    } else if (confKey == 5) {
       conf.alr_min[0] = confValue;      
-    } else if (confKey == 7) {
+    } else if (confKey == 6) {
       conf.alr_min[1] = confValue;
-    } else if (confKey == 8) {
+    } else if (confKey == 7) {
       conf.alr_hys[0] = confValue;
-    } else if (confKey == 9) {
+    } else if (confKey == 8) {
       conf.alr_hys[1] = confValue;
-    } else if (confKey == 10) {
+    } else if (confKey == 9) {
       conf.cal_b[0] = confValue;
-    } else if (confKey == 11) {
+    } else if (confKey == 10) {
       conf.cal_b[1] = confValue;
-    } else if (confKey == 12) {
+    } else if (confKey == 11) {
       conf.an_type[0] = confValue;
-    } else if (confKey == 13) {
+    } else if (confKey == 12) {
       conf.an_type[1] = confValue;         
-    } else if (confKey == 14) {
+    } else if (confKey == 13) {
       conf.dig_type[0] = confValue;      
-    } else if (confKey == 15) {
+    } else if (confKey == 14) {
       conf.dig_type[1] = confValue;     
     }
     EEPROM.put(0, conf);    
@@ -369,7 +368,7 @@ void lppDownlinkDec(String str) {
 void setPins() {
   for (uint8_t ch = 0; ch < 2 ; ch++) {
     pinMode(DIG_PIN[ch], INPUT);
-  }  
+  }   
   pinMode(RAK_RES_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);  
   pinMode(BAT_PIN, INPUT);
