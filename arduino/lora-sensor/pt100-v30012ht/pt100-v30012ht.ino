@@ -23,7 +23,7 @@ bool isPowerUp;
 const uint8_t vrefEnDly = 20, digDly = 100;
 const uint8_t batEnDly = 1, batSampDly = 1, batSampNum = 3;
 const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4, atDr2 = 5;
-uint16_t minuteRead, minuteSend;
+uint16_t minuteRead, minuteSend, sendP;
 const long tmrSec120 = 120000, tmrSec10 = 10000, tmrMsec100 = 100;
 
 struct Conf {
@@ -93,7 +93,7 @@ void loop() {
       return;      
     }    
   }    
-  if (minuteSend >= conf.send_p) {
+  if (minuteSend >= sendP) {
     uplink();
     return;
   }    
@@ -219,10 +219,10 @@ void adjAds(const uint8_t ch) {
 }
 void loadConf() {
   EEPROM.get(0, conf);
-  conf.send_p = conf.send_p * 0.8;
   //if (conf.send_p < 15) {
   //  conf.send_p = 15;
-  //}  
+  //} 
+  sendP = conf.send_p * 0.8;   
 }
 void rakClear() {  
   while (rakSerial.available()) {
@@ -335,7 +335,7 @@ void lppDownlinkDec(String str) {
     if (confKey == 1) {
       conf.read_p = confValue;      
     } else if (confKey == 2) {
-      conf.send_p = confValue;              
+      conf.send_p = confValue;                    
     } else if (confKey == 3) {
       conf.alr_max[0] = confValue;      
     } else if (confKey == 4) {
@@ -410,7 +410,7 @@ void setUsb() {
         } else if (str.startsWith(F("send_p"))) {
           if (str.indexOf(F("=")) >= 0) {
             str.replace(F("send_p="), "");
-            conf.send_p = str.toInt();
+            conf.send_p = str.toInt();            
             EEPROM.put(0, conf);
             Serial.println(F("OK"));
           } else {

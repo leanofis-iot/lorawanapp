@@ -19,7 +19,7 @@ volatile bool isAlarm = false;
 bool isPowerUp;
 const uint8_t batEnDly = 1, batSampDly = 1, batSampNum = 3;
 const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4, atDr2 = 5;
-uint16_t minuteSend;
+uint16_t minuteSend, sendP;
 const long tmrSec120 = 120000, tmrSec10 = 10000, tmrMsec100 = 100;
 
 struct Conf {
@@ -77,7 +77,7 @@ void loop() {
     }              
   }    
   minuteSend++;  
-  if (minuteSend >= conf.send_p) {
+  if (minuteSend >= sendP) {
     uplink();
     return;
   }    
@@ -141,10 +141,11 @@ void setSht() {
 }
 void loadConf() {
   EEPROM.get(0, conf);
-  conf.send_p = conf.send_p * 0.8;
   //if (conf.send_p < 15) {
   //  conf.send_p = 15;
-  //}  
+  //} 
+  sendP = conf.send_p * 0.8;
+   
 }
 void rakClear() {  
   while (rakSerial.available()) {
