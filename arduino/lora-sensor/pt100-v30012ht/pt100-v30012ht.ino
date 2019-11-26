@@ -22,7 +22,7 @@ volatile bool isAlarm = false;
 bool isPowerUp;
 const uint8_t vrefEnDly = 20, digDly = 100;
 const uint8_t batEnDly = 1, batSampDly = 1, batSampNum = 3;
-const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4, atDr2 = 5;
+const uint8_t atWake = 1, atSleep = 2, atJoin = 3, atSend = 4, atDr = 5;
 uint16_t minuteRead, minuteSend, sendP;
 const long tmrSec120 = 120000, tmrSec10 = 10000, tmrMsec100 = 100;
 
@@ -34,7 +34,8 @@ struct Conf {
   float alr_hys[2];
   float cal_b[2];  
   uint8_t an_type[2];
-  uint8_t dig_type[2];  
+  uint8_t dig_type[2];
+  uint8_t dr;  
 };
 
 Conf conf;
@@ -56,7 +57,7 @@ void setup() {
   readAll();
   readAll();
   if (rakJoin()) {
-    if (!rakDr2()) {
+    if (!rakDr()) {
       resetMe();     
     }    
     if (!rakSleep()) {      
@@ -65,7 +66,7 @@ void setup() {
     delay(1000);    
     uplink();         
   } else {
-    if (!rakDr2()) {
+    if (!rakDr()) {
       resetMe();     
     }       
     if (!rakSleep()) {          
@@ -251,10 +252,11 @@ bool rakSend(String str) {
   rakSerial.println(str);  
   return rakResponse(atSend, tmrSec10);    
 }
-bool rakDr2() {
+bool rakDr() {
   rakClear();   
-  rakSerial.println(F("at+set_config=lora:dr:2"));  
-  return rakResponse(atDr2, tmrSec10);
+  rakSerial.print(F("at+set_config=lora:dr:")); 
+  rakSerial.println(conf.dr); 
+  return rakResponse(atDr, tmrSec10);
 }
 bool rakResponse(const uint8_t atCommand, const long atTmr) {
   String str;
@@ -289,7 +291,7 @@ bool rakResponse(const uint8_t atCommand, const long atTmr) {
             digitalWrite(LED_PIN, HIGH);
             return false;       
           }
-        } else if (atCommand == atDr2) {
+        } else if (atCommand == atDr) {
           if (str.equalsIgnoreCase(F("OK"))) {            
             return true;
           }            
@@ -359,7 +361,9 @@ void lppDownlinkDec(String str) {
     } else if (confKey == 13) {
       conf.dig_type[0] = confValue;      
     } else if (confKey == 14) {
-      conf.dig_type[1] = confValue;     
+      conf.dig_type[1] = confValue;
+    } else if (confKey == 15) {
+      conf.dr = confValue;     
     }
     EEPROM.put(0, conf);    
     resetMe();  
@@ -536,7 +540,17 @@ void setUsb() {
           } else {
             Serial.print(F("OK"));
             Serial.println(conf.dig_type[1]);
-          }                   
+          }
+        } else if (str.startsWith(F("dr"))) {
+          if (str.indexOf(F("=")) >= 0) {
+            str.replace(F("dr="), "");
+            conf.dr = str.toInt();            
+            EEPROM.put(0, conf);
+            Serial.println(F("OK"));
+          } else {
+            Serial.print(F("OK"));
+            Serial.println(conf.dr);
+          }                            
         }
         str = "";        
       }      

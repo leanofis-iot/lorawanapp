@@ -8,7 +8,8 @@ struct Conf {
   const float alr_hys[2] = {1, 1};
   const float cal_b[2] = {-6.3, -6.3};  
   const uint8_t an_type[2] = {1, 0};
-  const uint8_t dig_type[2] = {1, 0};  
+  const uint8_t dig_type[2] = {1, 0}; 
+  const uint8_t dr = 2; 
 };
 
 Conf conf;
